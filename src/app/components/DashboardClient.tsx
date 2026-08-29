@@ -224,6 +224,22 @@ export default function DashboardClient({ user }: { user: User }) {
     return matchesName && matchesProject && matchesDate;
   });
 
+  const handleDeleteCompletion = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this completed task record?')) return;
+    try {
+      const res = await fetch(`/api/submissions/completed?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setCompletions((prev) => prev.filter((c) => c.id !== id));
+      } else {
+        alert('Failed to delete task');
+      }
+    } catch (err) {
+      alert('Error deleting task');
+    }
+  };
+
   return (
     <div>
       {activeCard && (
@@ -658,12 +674,13 @@ export default function DashboardClient({ user }: { user: User }) {
                     <th>Est. Date</th>
                     <th>Executant Remarks</th>
                     <th>Completion Date</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCompletions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                         No completed task records match your criteria
                       </td>
                     </tr>
@@ -681,6 +698,20 @@ export default function DashboardClient({ user }: { user: User }) {
                           </div>
                         </td>
                         <td>{new Date(c.completionDate).toLocaleDateString()}</td>
+                        <td>
+                          <button
+                            className="btn btn-outline"
+                            style={{
+                              borderColor: '#ff4444',
+                              color: '#ff4444',
+                              padding: '0.3rem 0.6rem',
+                              fontSize: '0.8rem',
+                            }}
+                            onClick={() => handleDeleteCompletion(c.id)}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
