@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int            @id @default(autoincrement())
+  email            String         @unique
+  password         String
+  name             String
+  roles            String         // Comma-separated list of roles
+  assignedProjects Project[]      @relation("AssignedProjects")
+  submissions      Submission[]
+  notifications    Notification[]
+}
+
+model Project {
+  id              Int          @id @default(autoincrement())
+  contractNo      String
+  partNo          String
+  partDescription String
+  estimatedDate   DateTime
+  remarks         String
+  status          String       @default("Due") // "Due" or "Completed"
+  assignedToId    Int
+  assignedTo      User         @relation("AssignedProjects", fields: [assignedToId], references: [id])
+  submissions     Submission[]
+}
+
+model Submission {
+  id            Int      @id @default(autoincrement())
+  projectId     Int
+  project       Project  @relation(fields: [projectId], references: [id])
+  submittedById Int
+  submittedBy   User     @relation(fields: [submittedById], references: [id])
+  remarks       String
+  isFinal       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
