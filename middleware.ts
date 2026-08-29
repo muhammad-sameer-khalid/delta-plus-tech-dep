@@ -5,13 +5,22 @@ import { verifyToken } from '@/lib/auth';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public paths
-  if (pathname.startsWith('/login') || pathname.startsWith('/api/auth/login')) {
+  // If already logged in and visiting /login, redirect to home
+  const token = request.cookies.get('auth_token')?.value;
+
+  if (pathname === '/login') {
+    if (token) {
+      const payload = await verifyToken(token);
+      if (payload) {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+    }
     return NextResponse.next();
   }
 
-  // API or internal routes
-  const token = request.cookies.get('auth_token')?.value;
+  if (pathname.startsWith('/api/auth/login')) {
+    return NextResponse.next();
+  }
 
   if (!token) {
     if (pathname.startsWith('/api')) {

@@ -13,7 +13,7 @@ A full-stack, role-based project management system built with Next.js (App Route
    - **Executant**: View assigned Due Projects and Submit Task updates/completions.
 
 2. **Admin Panel (`/admin`)**:
-   - **Account & Roles Table**: Displays all accounts, their assigned roles (separated by `,`), and user names. Default admin `khalid.p38@gmail.com` with role `Supervisor`.
+   - **Account & Roles Table**: Displays all accounts, their assigned roles (separated by `,`), and user names. Default admin `khalid.pk38@gmail.com` with role `Supervisor`.
    - **Role Management**: Add or remove roles for an account. If a role already exists, saving removes it (if it was the last role, the account is deleted). Adding new roles appends them separated by commas. Creating a role for a new email automatically generates the account with default password `password1122`.
    - **Update Password**: Update password for any email account.
 
@@ -37,7 +37,7 @@ A full-stack, role-based project management system built with Next.js (App Route
 
 2. **Database Setup**:
    The local environment is configured with SQLite (`dev.db`).
-   Run migration and seed the initial Supervisor account (`khalid.p38@gmail.com` | `admin123`):
+   Run migration and seed the initial Supervisor account (`khalid.pk38@gmail.com` | `admin123`):
    ```bash
    npx prisma migrate dev --name init
    node seed.js
@@ -47,7 +47,7 @@ A full-stack, role-based project management system built with Next.js (App Route
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser. Log in with `khalid.p38@gmail.com` and password `admin123`.
+   Open [http://localhost:3000](http://localhost:3000) in your browser. Log in with `khalid.pk38@gmail.com` and password `admin123`.
 
 ---
 
@@ -104,7 +104,7 @@ Follow these step-by-step instructions to host the database on **Aiven** and dep
 ## 🔑 Default Credentials
 
 - **Initial Admin User**:
-  - Email: `khalid.p38@gmail.com`
+  - Email: `khalid.pk38@gmail.com`
   - Password: `admin123`
   - Role: `Supervisor`
 

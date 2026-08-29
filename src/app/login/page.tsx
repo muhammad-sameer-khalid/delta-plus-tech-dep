@@ -22,8 +22,8 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        router.push('/');
-        router.refresh();
+        window.location.href = '/';
+        return;
       } else {
         const data = await res.json();
         setError(data.error || 'Login failed');
