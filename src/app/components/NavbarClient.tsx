@@ -1,10 +1,27 @@
 'use client';
+
 import { useState } from 'react';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 
-export default function NavbarClient({ user, initialUnreadCount }: { user: any, initialUnreadCount: number }) {
+export default function NavbarClient({
+  user,
+  initialUnreadCount,
+}: {
+  user: any;
+  initialUnreadCount: number;
+}) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error(err);
+    }
+    window.location.href = '/login';
+  };
 
   return (
     <header className="navbar">
@@ -15,12 +32,11 @@ export default function NavbarClient({ user, initialUnreadCount }: { user: any, 
           <span className="brand-sub">Technical Department</span>
         </span>
       </Link>
-      
-      <button 
-        className="nav-toggle" 
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <span></span><span></span><span></span>
+
+      <button className="nav-toggle" onClick={() => setIsOpen(!isOpen)}>
+        <span></span>
+        <span></span>
+        <span></span>
       </button>
 
       <nav className={`nav-links ${isOpen ? 'open' : ''}`}>
@@ -28,7 +44,7 @@ export default function NavbarClient({ user, initialUnreadCount }: { user: any, 
         {user && (user.roles.includes('Supervisor') || user.roles.includes('Co-Supervisor')) && (
           <Link href="/admin">Admin</Link>
         )}
-        
+
         {user ? (
           <>
             <Link href="/notifications" className="notification-bell">
@@ -37,7 +53,9 @@ export default function NavbarClient({ user, initialUnreadCount }: { user: any, 
                 <span className="notification-dot">{initialUnreadCount}</span>
               )}
             </Link>
-            <a href="/api/auth/logout">Logout</a>
+            <a href="/api/auth/logout" onClick={handleLogout}>
+              Logout
+            </a>
           </>
         ) : (
           <Link href="/login">Login</Link>
