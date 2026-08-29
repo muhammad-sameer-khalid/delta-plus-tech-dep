@@ -86,7 +86,7 @@ Follow these step-by-step instructions to host the database on **Aiven** and dep
    - **Branch**: `main`
    - **Build Command**:
      ```bash
-     npm install && npx prisma migrate deploy && node seed.js && npm run build
+     npm install --include=dev && npx prisma db push && node seed.js && npm run build
      ```
    - **Start Command**:
      ```bash
