@@ -375,7 +375,7 @@ export default function DashboardClient({ user }: { user: User }) {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-grid-2">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Contract No.</label>
                   <input

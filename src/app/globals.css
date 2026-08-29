@@ -21,10 +21,11 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  overflow-x: hidden;
 }
 
 a {
@@ -32,18 +33,20 @@ a {
   text-decoration: none;
 }
 
+/* NAVBAR */
 .navbar {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 50;
   height: var(--nav-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 0 1.25rem;
-  background: #000;
+  background: #000000;
   border-bottom: 1px solid var(--line);
+  width: 100%;
 }
 
 .brand {
@@ -54,8 +57,8 @@ a {
 }
 
 .brand-logo {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   object-fit: cover;
   border-radius: 4px;
   flex-shrink: 0;
@@ -70,10 +73,11 @@ a {
 .brand-name {
   font-weight: 700;
   letter-spacing: 0.02em;
+  font-size: 1.05rem;
 }
 
 .brand-sub {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -86,8 +90,9 @@ a {
 }
 
 .nav-links a {
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   color: var(--muted);
+  transition: color 0.15s ease;
 }
 
 .nav-links a:hover,
@@ -103,6 +108,11 @@ a {
   border: 0;
   background: transparent;
   cursor: pointer;
+  border-radius: 4px;
+}
+
+.nav-toggle:hover {
+  background: var(--surface);
 }
 
 .nav-toggle span {
@@ -110,12 +120,15 @@ a {
   height: 2px;
   margin: 6px 8px;
   background: var(--accent);
+  transition: transform 0.2s, opacity 0.2s;
 }
 
+/* LAYOUT CONTAINERS */
 .hero {
   max-width: 720px;
   margin: 0 auto;
-  padding: 5rem 1.25rem 4rem;
+  padding: 4rem 1.25rem 3rem;
+  width: 100%;
 }
 
 .eyebrow {
@@ -128,7 +141,7 @@ a {
 
 .hero h1 {
   margin: 0 0 1rem;
-  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-size: clamp(1.8rem, 4vw, 3rem);
   line-height: 1.15;
   font-weight: 700;
 }
@@ -136,15 +149,15 @@ a {
 .lede {
   margin: 0;
   color: var(--muted);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   max-width: 40rem;
 }
 
 .panel {
   max-width: 960px;
   margin: 0 auto;
-  padding: 3rem 1.25rem;
-  border-top: 1px solid var(--line);
+  padding: 2.5rem 1.25rem;
+  width: 100%;
 }
 
 .panel h2 {
@@ -157,85 +170,42 @@ a {
   color: var(--muted);
 }
 
-.cards {
-  list-style: none;
-  margin: 1.25rem 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-}
-
-.cards li {
+/* DASHBOARD CARDS */
+.dash-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  padding: 1.25rem;
+  border-left: 4px solid var(--accent);
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+  height: 100%;
+  border-radius: 4px;
 }
 
-.cards h3 {
-  margin: 0 0 0.4rem;
-  font-size: 1rem;
-  color: var(--accent);
+.dash-card:hover {
+  transform: translateY(-2px);
+  border-color: #333333;
+  border-left-color: var(--accent);
 }
 
-.cards p {
+.dash-card h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1.15rem;
+  color: var(--text);
 }
 
-.footer {
-  border-top: 1px solid var(--line);
-  padding: 1.25rem;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.footer p {
-  margin: 0;
-}
-
-@media (max-width: 720px) {
-  .nav-toggle {
-    display: block;
-  }
-
-  .nav-links {
-    display: none;
-    position: absolute;
-    top: var(--nav-h);
-    left: 0;
-    right: 0;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-    background: #000;
-    border-bottom: 1px solid var(--line);
-    padding: 0.5rem 0;
-  }
-
-  .nav-links.open {
-    display: flex;
-  }
-
-  .nav-links a {
-    padding: 0.75rem 1.25rem;
-  }
-
-  .cards {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Custom Additions */
+/* FORM CONTROLS & RESPONSIVE GRIDS */
 .input {
   width: 100%;
+  min-height: 42px;
   padding: 0.75rem;
-  background: #000;
+  background: #000000;
   border: 1px solid var(--line);
   color: var(--text);
   border-radius: 4px;
   margin-bottom: 1rem;
+  font-size: 0.95rem;
+  font-family: inherit;
 }
 
 .input:focus {
@@ -243,21 +213,34 @@ a {
   border-color: var(--accent);
 }
 
+select.input option {
+  background: #111111;
+  color: #ffffff;
+}
+
 .btn {
   background: var(--accent);
-  color: #000;
+  color: #000000;
   border: none;
-  padding: 0.75rem 1.5rem;
-  font-weight: bold;
+  min-height: 42px;
+  padding: 0.65rem 1.25rem;
+  font-weight: 700;
   border-radius: 4px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  font-size: 0.92rem;
+  transition: opacity 0.15s ease, transform 0.1s ease;
 }
 
 .btn:hover {
   opacity: 0.9;
+}
+
+.btn:active {
+  transform: scale(0.98);
 }
 
 .btn-outline {
@@ -270,53 +253,75 @@ a {
   background: rgba(200, 255, 0, 0.1);
 }
 
+/* RESPONSIVE FORM GRID HELPERS */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.form-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+/* TABLES & RESPONSIVE CONTAINERS */
 .table-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   margin-top: 1rem;
   border: 1px solid var(--line);
   border-radius: 4px;
+  width: 100%;
+}
+
+.table-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 600px;
 }
 
 th, td {
-  padding: 1rem;
+  padding: 0.85rem 1rem;
   text-align: left;
   border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
 }
 
 th {
-  background: #000;
+  background: #000000;
   font-weight: 600;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 tr:last-child td {
   border-bottom: none;
 }
 
-/* Updated card style for dashboard */
-.dash-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  padding: 1.5rem;
-  cursor: pointer;
-  transition: transform 0.2s;
-  height: 100%;
-}
-.dash-card:hover {
-  transform: translateY(-2px);
-}
-.dash-card h3 {
-  margin: 0;
-  font-size: 1.2rem;
-  color: var(--text);
-}
-
+/* NOTIFICATIONS */
 .notification-bell {
   position: relative;
   display: inline-flex;
@@ -327,9 +332,11 @@ tr:last-child td {
   border-radius: 50%;
   transition: background 0.2s;
 }
+
 .notification-bell:hover {
   background: var(--surface);
 }
+
 .notification-dot {
   position: absolute;
   top: 0;
@@ -345,4 +352,89 @@ tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.footer p {
+  margin: 0;
+}
+
+/* RESPONSIVE MEDIA QUERIES */
+@media (max-width: 768px) {
+  .nav-toggle {
+    display: block;
+  }
+
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: var(--nav-h);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: #000000;
+    border-bottom: 1px solid var(--line);
+    padding: 0.75rem 0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8);
+  }
+
+  .nav-links.open {
+    display: flex;
+  }
+
+  .nav-links a {
+    padding: 0.85rem 1.5rem;
+    font-size: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .nav-links a:last-child {
+    border-bottom: none;
+  }
+
+  .hero {
+    padding: 2.5rem 1rem 2rem;
+  }
+
+  .panel {
+    padding: 1.5rem 1rem;
+  }
+
+  .form-grid-2,
+  .form-grid-3,
+  .form-grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  th, td {
+    padding: 0.75rem 0.75rem;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-sub {
+    font-size: 0.65rem;
+  }
+
+  .brand-name {
+    font-size: 0.95rem;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .dash-card {
+    padding: 1.25rem;
+  }
 }
