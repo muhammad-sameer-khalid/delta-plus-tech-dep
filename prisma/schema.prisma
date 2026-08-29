@@ -27,16 +27,16 @@ model Project {
   remarks         String
   status          String       @default("Due") // "Due" or "Completed"
   assignedToId    Int
-  assignedTo      User         @relation("AssignedProjects", fields: [assignedToId], references: [id])
+  assignedTo      User         @relation("AssignedProjects", fields: [assignedToId], references: [id], onDelete: Cascade)
   submissions     Submission[]
 }
 
 model Submission {
   id            Int      @id @default(autoincrement())
   projectId     Int
-  project       Project  @relation(fields: [projectId], references: [id])
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   submittedById Int
-  submittedBy   User     @relation(fields: [submittedById], references: [id])
+  submittedBy   User     @relation(fields: [submittedById], references: [id], onDelete: Cascade)
   remarks       String
   isFinal       Boolean  @default(false)
   createdAt     DateTime @default(now())
@@ -45,7 +45,7 @@ model Submission {
 model Notification {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   message   String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())

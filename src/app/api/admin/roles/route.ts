@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   try {
     const headersList = await headers();
     const reqRoles = headersList.get('x-user-roles') || '';
-    
+
     if (!reqRoles.includes('Supervisor') && !reqRoles.includes('Co-Supervisor')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -36,15 +36,19 @@ export async function POST(request: Request) {
         currentRoles = currentRoles.filter((r) => r !== cleanRole);
 
         if (currentRoles.length === 0) {
-          // If no roles left, delete account
+          // Clean up related records before deleting account to prevent foreign key errors
+          await db.notification.deleteMany({ where: { userId: existingUser.id } });
+          await db.submission.deleteMany({ where: { submittedById: existingUser.id } });
+          await db.project.deleteMany({ where: { assignedToId: existingUser.id } });
+
           await db.user.delete({
-            where: { email: cleanEmail },
+            where: { id: existingUser.id },
           });
           return NextResponse.json({ message: 'Role removed and account deleted because no roles remain' });
         } else {
           // Update roles
           const updatedUser = await db.user.update({
-            where: { email: cleanEmail },
+            where: { id: existingUser.id },
             data: {
               roles: currentRoles.join(','),
               name: name ? name.trim() : existingUser.name,
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
         // Add role
         currentRoles.push(cleanRole);
         const updatedUser = await db.user.update({
-          where: { email: cleanEmail },
+          where: { id: existingUser.id },
           data: {
             roles: currentRoles.join(','),
             name: name ? name.trim() : existingUser.name,
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'New account created with role', user: newUser });
     }
   } catch (error) {
-    console.error(error);
+    console.error('Error modifying user roles:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
