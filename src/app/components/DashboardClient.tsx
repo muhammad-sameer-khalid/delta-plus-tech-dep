@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 type User = {
   id: number;
@@ -48,6 +48,71 @@ type AbandonedProject = {
   assignedTo: string;
   assignedToEmail: string;
 };
+
+// Helper to get today's date in YYYY-MM-DD format (local timezone)
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Expandable Remarks Component with scrollbar and expand / show less toggle
+function ExpandableRemarks({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (textRef.current && !isExpanded) {
+      setHasOverflow(textRef.current.scrollHeight > 80 || text.length > 70);
+    }
+  }, [text, isExpanded]);
+
+  return (
+    <div style={{ minWidth: '180px', maxWidth: '380px' }}>
+      <div
+        ref={textRef}
+        style={{
+          maxHeight: isExpanded ? 'none' : '80px',
+          overflowY: isExpanded ? 'visible' : 'auto',
+          paddingRight: '4px',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          fontSize: '0.88rem',
+          lineHeight: '1.4',
+        }}
+      >
+        {text}
+      </div>
+      {hasOverflow && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--accent)',
+            fontSize: '0.75rem',
+            cursor: 'pointer',
+            padding: '2px 0 0 0',
+            marginTop: '4px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            textDecoration: 'underline',
+            fontWeight: 600,
+          }}
+        >
+          {isExpanded ? 'Show less' : 'Expand'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 // Helper to calculate delay between submission date and estimated date
 function calculateDelay(submissionDateStr: string, estimatedDateStr: string) {
@@ -189,6 +254,13 @@ export default function DashboardClient({ user }: { user: User }) {
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedExecutant) return;
+
+    const todayStr = getTodayDateString();
+    if (assignForm.estimatedDate < todayStr) {
+      setAssignStatus({ loading: false, msg: '', error: 'Estimated date cannot be before today.' });
+      return;
+    }
+
     setAssignStatus({ loading: true, msg: '', error: '' });
 
     try {
@@ -539,6 +611,7 @@ export default function DashboardClient({ user }: { user: User }) {
                 <input
                   type="date"
                   className="input"
+                  min={getTodayDateString()}
                   value={assignForm.estimatedDate}
                   onChange={(e) => setAssignForm({ ...assignForm, estimatedDate: e.target.value })}
                   required
@@ -605,7 +678,9 @@ export default function DashboardClient({ user }: { user: User }) {
                         <td>{p.partNo}</td>
                         <td>{p.partDescription}</td>
                         <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
-                        <td>{p.remarks}</td>
+                        <td>
+                          <ExpandableRemarks text={p.remarks} />
+                        </td>
                       </tr>
                     ))
                   )}
@@ -840,9 +915,7 @@ export default function DashboardClient({ user }: { user: User }) {
                             )}
                           </td>
                           <td>
-                            <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px' }}>
-                              {c.remarks}
-                            </div>
+                            <ExpandableRemarks text={c.remarks} />
                           </td>
                           <td>
                             <button
@@ -972,9 +1045,7 @@ export default function DashboardClient({ user }: { user: User }) {
                             )}
                           </td>
                           <td>
-                            <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px' }}>
-                              {c.remarks}
-                            </div>
+                            <ExpandableRemarks text={c.remarks} />
                           </td>
                           <td>
                             <button
@@ -1093,9 +1164,7 @@ export default function DashboardClient({ user }: { user: User }) {
                         </td>
                         <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
                         <td>
-                          <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px' }}>
-                            {p.remarks}
-                          </div>
+                          <ExpandableRemarks text={p.remarks} />
                         </td>
                         <td>
                           <span

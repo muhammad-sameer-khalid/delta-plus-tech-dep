@@ -18,6 +18,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
+    const targetDate = new Date(estimatedDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (targetDate < today) {
+      return NextResponse.json({ error: 'Estimated date cannot be before today' }, { status: 400 });
+    }
+
     const project = await db.project.create({
       data: {
         contractNo,
