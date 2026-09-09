@@ -20,8 +20,10 @@ A full-stack, role-based project management system built with Next.js (App Route
 3. **Dashboard Cards & Predictive Search**:
    - **Assign Project**: Select executant/co-supervisor via predictive search by name. Fill contract no, part no, part description, estimated date, and remarks. Automatically sends a notification.
    - **Due Projects**: View all due projects assigned to you with predictive search across contract no, part no, or description.
-   - **Submit Task**: Select project via predictive search, add progress remarks, and optionally check "Project complete" to move the task to Completed Tasks.
-   - **Completed Tasks**: View completed tasks with 3 simultaneous predictive filters: Search by Name, Search by Project, and Date Range filter (Since / Till).
+   - **Submit Task**: Select project via predictive search, add progress remarks, and optionally check "Project complete" to move the task to Completed Projects.
+   - **Submitted Tasks**: View all submitted task progress updates and completions with default search (Name, Project, Date Range). Displays a checkmark emoji (✅) next to Contract No for completed tasks, and includes a **Delay** column ("On Time" or "X days delay").
+   - **Completed Projects**: Dedicated view for Supervisor, Co-Supervisor, and Director displaying only finalized completion tasks, equipped with the default predictive search and the **Delay** column.
+   - **Abandoned Projects**: Visible to Supervisor, Co-Supervisor, and Director, listing projects that have received zero submissions, equipped with the default predictive search across assignee name, project details, and estimated date range.
 
 4. **Notifications**:
    - Dynamic notification bell in navbar with unread red dot indicator.

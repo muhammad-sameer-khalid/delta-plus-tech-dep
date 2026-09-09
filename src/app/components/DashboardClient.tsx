@@ -37,6 +37,42 @@ type Completion = {
   isFinal: boolean;
 };
 
+type AbandonedProject = {
+  id: number;
+  contractNo: string;
+  partNo: string;
+  partDescription: string;
+  estimatedDate: string;
+  remarks: string;
+  status: string;
+  assignedTo: string;
+  assignedToEmail: string;
+};
+
+// Helper to calculate delay between submission date and estimated date
+function calculateDelay(submissionDateStr: string, estimatedDateStr: string) {
+  if (!submissionDateStr || !estimatedDateStr) return { text: 'N/A', isDelayed: false };
+  const subDate = new Date(submissionDateStr);
+  const estDate = new Date(estimatedDateStr);
+
+  if (isNaN(subDate.getTime()) || isNaN(estDate.getTime())) {
+    return { text: 'N/A', isDelayed: false };
+  }
+
+  // Compare calendar days using UTC to avoid timezone offset discrepancies
+  const subUTC = Date.UTC(subDate.getUTCFullYear(), subDate.getUTCMonth(), subDate.getUTCDate());
+  const estUTC = Date.UTC(estDate.getUTCFullYear(), estDate.getUTCMonth(), estDate.getUTCDate());
+
+  const diffMs = subUTC - estUTC;
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) {
+    return { text: 'On Time', isDelayed: false };
+  } else {
+    return { text: `${diffDays} day${diffDays === 1 ? '' : 's'} delay`, isDelayed: true };
+  }
+}
+
 export default function DashboardClient({ user }: { user: User }) {
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
@@ -47,11 +83,13 @@ export default function DashboardClient({ user }: { user: User }) {
   const isDirector = rolesList.includes('Director');
   const isExecutant = rolesList.includes('Executant');
 
-  // Can access cards
+  // Permissions for cards
   const canAssign = isSupervisor || isCoSupervisor;
   const canDue = isCoSupervisor || isExecutant;
   const canSubmit = isCoSupervisor || isExecutant;
-  const canCompleted = isSupervisor || isCoSupervisor || isDirector;
+  const canSubmitted = isSupervisor || isCoSupervisor || isDirector;
+  const canCompletedProjects = isSupervisor || isCoSupervisor || isDirector;
+  const canAbandoned = isSupervisor || isCoSupervisor || isDirector;
 
   // --- Assign Project State ---
   const [executants, setExecutants] = useState<ExecutantUser[]>([]);
@@ -81,13 +119,29 @@ export default function DashboardClient({ user }: { user: User }) {
   });
   const [submitStatus, setSubmitStatus] = useState({ loading: false, msg: '', error: '' });
 
-  // --- Completed Tasks State ---
+  // --- Submissions State (shared between Submitted Tasks & Completed Projects) ---
   const [completions, setCompletions] = useState<Completion[]>([]);
-  const [completedLoading, setCompletedLoading] = useState(false);
-  const [nameSearch, setNameSearch] = useState('');
-  const [projectSearch, setProjectSearch] = useState('');
-  const [sinceDate, setSinceDate] = useState('');
-  const [tillDate, setTillDate] = useState('');
+  const [completionsLoading, setCompletionsLoading] = useState(false);
+
+  // Search state for Submitted Tasks
+  const [submittedNameSearch, setSubmittedNameSearch] = useState('');
+  const [submittedProjectSearch, setSubmittedProjectSearch] = useState('');
+  const [submittedSinceDate, setSubmittedSinceDate] = useState('');
+  const [submittedTillDate, setSubmittedTillDate] = useState('');
+
+  // Search state for Completed Projects
+  const [completedNameSearch, setCompletedNameSearch] = useState('');
+  const [completedProjectSearch, setCompletedProjectSearch] = useState('');
+  const [completedSinceDate, setCompletedSinceDate] = useState('');
+  const [completedTillDate, setCompletedTillDate] = useState('');
+
+  // --- Abandoned Projects State ---
+  const [abandonedProjects, setAbandonedProjects] = useState<AbandonedProject[]>([]);
+  const [abandonedLoading, setAbandonedLoading] = useState(false);
+  const [abandonedNameSearch, setAbandonedNameSearch] = useState('');
+  const [abandonedProjectSearch, setAbandonedProjectSearch] = useState('');
+  const [abandonedSinceDate, setAbandonedSinceDate] = useState('');
+  const [abandonedTillDate, setAbandonedTillDate] = useState('');
 
   // Fetch data on card open
   useEffect(() => {
@@ -110,13 +164,22 @@ export default function DashboardClient({ user }: { user: User }) {
         .then((res) => res.json())
         .then((data) => setSubmitProjects(data))
         .catch(console.error);
-    } else if (activeCard === 'completed') {
-      setCompletedLoading(true);
+    } else if (activeCard === 'submitted' || activeCard === 'completed_projects') {
+      setCompletionsLoading(true);
       fetch('/api/submissions/completed')
         .then((res) => res.json())
         .then((data) => {
           setCompletions(data);
-          setCompletedLoading(false);
+          setCompletionsLoading(false);
+        })
+        .catch(console.error);
+    } else if (activeCard === 'abandoned') {
+      setAbandonedLoading(true);
+      fetch('/api/projects/abandoned')
+        .then((res) => res.json())
+        .then((data) => {
+          setAbandonedProjects(data);
+          setAbandonedLoading(false);
         })
         .catch(console.error);
     }
@@ -184,6 +247,22 @@ export default function DashboardClient({ user }: { user: User }) {
     }
   };
 
+  const handleDeleteCompletion = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this submission record?')) return;
+    try {
+      const res = await fetch(`/api/submissions/completed?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setCompletions((prev) => prev.filter((c) => c.id !== id));
+      } else {
+        alert('Failed to delete submission');
+      }
+    } catch (err) {
+      alert('Error deleting submission');
+    }
+  };
+
   // Predictive search filters
   const filteredExecutants = executants.filter((u) =>
     u.name.toLowerCase().includes(executantSearch.toLowerCase())
@@ -203,42 +282,70 @@ export default function DashboardClient({ user }: { user: User }) {
       p.partDescription.toLowerCase().includes(submitSearch.toLowerCase())
   );
 
-  const filteredCompletions = completions.filter((c) => {
-    const matchesName = c.submittedBy.toLowerCase().includes(nameSearch.toLowerCase());
+  // Submitted Tasks Filter
+  const filteredSubmittedTasks = completions.filter((c) => {
+    const matchesName = c.submittedBy.toLowerCase().includes(submittedNameSearch.toLowerCase());
     const matchesProject =
-      c.contractNo.toLowerCase().includes(projectSearch.toLowerCase()) ||
-      c.partNo.toLowerCase().includes(projectSearch.toLowerCase()) ||
-      c.partDescription.toLowerCase().includes(projectSearch.toLowerCase());
+      c.contractNo.toLowerCase().includes(submittedProjectSearch.toLowerCase()) ||
+      c.partNo.toLowerCase().includes(submittedProjectSearch.toLowerCase()) ||
+      c.partDescription.toLowerCase().includes(submittedProjectSearch.toLowerCase());
 
     let matchesDate = true;
     const compTime = new Date(c.completionDate).getTime();
-    if (sinceDate) {
-      matchesDate = matchesDate && compTime >= new Date(sinceDate).getTime();
+    if (submittedSinceDate) {
+      matchesDate = matchesDate && compTime >= new Date(submittedSinceDate).getTime();
     }
-    if (tillDate) {
-      // Set end of day for till date
-      const tillTime = new Date(tillDate).setHours(23, 59, 59, 999);
+    if (submittedTillDate) {
+      const tillTime = new Date(submittedTillDate).setHours(23, 59, 59, 999);
       matchesDate = matchesDate && compTime <= tillTime;
     }
 
     return matchesName && matchesProject && matchesDate;
   });
 
-  const handleDeleteCompletion = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this completed task record?')) return;
-    try {
-      const res = await fetch(`/api/submissions/completed?id=${id}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setCompletions((prev) => prev.filter((c) => c.id !== id));
-      } else {
-        alert('Failed to delete task');
+  // Completed Projects Filter (Only isFinal === true)
+  const filteredCompletedProjects = completions
+    .filter((c) => c.isFinal)
+    .filter((c) => {
+      const matchesName = c.submittedBy.toLowerCase().includes(completedNameSearch.toLowerCase());
+      const matchesProject =
+        c.contractNo.toLowerCase().includes(completedProjectSearch.toLowerCase()) ||
+        c.partNo.toLowerCase().includes(completedProjectSearch.toLowerCase()) ||
+        c.partDescription.toLowerCase().includes(completedProjectSearch.toLowerCase());
+
+      let matchesDate = true;
+      const compTime = new Date(c.completionDate).getTime();
+      if (completedSinceDate) {
+        matchesDate = matchesDate && compTime >= new Date(completedSinceDate).getTime();
       }
-    } catch (err) {
-      alert('Error deleting task');
+      if (completedTillDate) {
+        const tillTime = new Date(completedTillDate).setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && compTime <= tillTime;
+      }
+
+      return matchesName && matchesProject && matchesDate;
+    });
+
+  // Abandoned Projects Filter (Default search feature)
+  const filteredAbandonedProjects = abandonedProjects.filter((p) => {
+    const matchesName = p.assignedTo.toLowerCase().includes(abandonedNameSearch.toLowerCase());
+    const matchesProject =
+      p.contractNo.toLowerCase().includes(abandonedProjectSearch.toLowerCase()) ||
+      p.partNo.toLowerCase().includes(abandonedProjectSearch.toLowerCase()) ||
+      p.partDescription.toLowerCase().includes(abandonedProjectSearch.toLowerCase());
+
+    let matchesDate = true;
+    const estTime = new Date(p.estimatedDate).getTime();
+    if (abandonedSinceDate) {
+      matchesDate = matchesDate && estTime >= new Date(abandonedSinceDate).getTime();
     }
-  };
+    if (abandonedTillDate) {
+      const tillTime = new Date(abandonedTillDate).setHours(23, 59, 59, 999);
+      matchesDate = matchesDate && estTime <= tillTime;
+    }
+
+    return matchesName && matchesProject && matchesDate;
+  });
 
   return (
     <div>
@@ -282,11 +389,29 @@ export default function DashboardClient({ user }: { user: User }) {
             </div>
           )}
 
-          {canCompleted && (
-            <div className="dash-card" onClick={() => setActiveCard('completed')}>
-              <h3>Completed Tasks</h3>
+          {canSubmitted && (
+            <div className="dash-card" onClick={() => setActiveCard('submitted')}>
+              <h3>Submitted Tasks</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
-                View completed tasks with advanced search.
+                View all submitted progress and final task reports.
+              </p>
+            </div>
+          )}
+
+          {canCompletedProjects && (
+            <div className="dash-card" onClick={() => setActiveCard('completed_projects')}>
+              <h3>Completed Projects</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+                View finalized projects where completion was confirmed.
+              </p>
+            </div>
+          )}
+
+          {canAbandoned && (
+            <div className="dash-card" onClick={() => setActiveCard('abandoned')}>
+              <h3>Abandoned Projects</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+                View projects with no task submissions recorded.
               </p>
             </div>
           )}
@@ -595,10 +720,10 @@ export default function DashboardClient({ user }: { user: User }) {
                   id="projectComplete"
                   checked={submitForm.isFinal}
                   onChange={(e) => setSubmitForm({ ...submitForm, isFinal: e.target.checked })}
-                  style={{ accentColor: 'var(--accent)', width: '18px', height: '18px' }}
+                  style={{ accentColor: 'var(--accent)', width: '18px', height: '18px', cursor: 'pointer' }}
                 />
                 <label htmlFor="projectComplete" style={{ fontSize: '0.9rem', cursor: 'pointer' }}>
-                  Project Complete (checking this removes project from Due Projects)
+                  <strong>Complete Project</strong> (checking this marks project as complete and removes it from Due Projects)
                 </label>
               </div>
 
@@ -610,12 +735,12 @@ export default function DashboardClient({ user }: { user: User }) {
         </section>
       )}
 
-      {/* CARD 4: COMPLETED TASKS */}
-      {activeCard === 'completed' && canCompleted && (
+      {/* CARD 4: SUBMITTED TASKS (formerly Completed Tasks) */}
+      {activeCard === 'submitted' && canSubmitted && (
         <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
-          <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Completed Tasks</h2>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Submitted Tasks</h2>
 
-          {/* 3 Predictive Search Bars */}
+          {/* Default Predictive Search Feature */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Name</label>
@@ -624,8 +749,8 @@ export default function DashboardClient({ user }: { user: User }) {
                 className="input"
                 style={{ marginBottom: 0 }}
                 placeholder="Submitted by name..."
-                value={nameSearch}
-                onChange={(e) => setNameSearch(e.target.value)}
+                value={submittedNameSearch}
+                onChange={(e) => setSubmittedNameSearch(e.target.value)}
               />
             </div>
             <div>
@@ -635,8 +760,8 @@ export default function DashboardClient({ user }: { user: User }) {
                 className="input"
                 style={{ marginBottom: 0 }}
                 placeholder="Contract / Part No / Desc..."
-                value={projectSearch}
-                onChange={(e) => setProjectSearch(e.target.value)}
+                value={submittedProjectSearch}
+                onChange={(e) => setSubmittedProjectSearch(e.target.value)}
               />
             </div>
             <div>
@@ -646,22 +771,22 @@ export default function DashboardClient({ user }: { user: User }) {
                   type="date"
                   className="input"
                   style={{ marginBottom: 0, padding: '0.5rem' }}
-                  value={sinceDate}
-                  onChange={(e) => setSinceDate(e.target.value)}
+                  value={submittedSinceDate}
+                  onChange={(e) => setSubmittedSinceDate(e.target.value)}
                 />
                 <input
                   type="date"
                   className="input"
                   style={{ marginBottom: 0, padding: '0.5rem' }}
-                  value={tillDate}
-                  onChange={(e) => setTillDate(e.target.value)}
+                  value={submittedTillDate}
+                  onChange={(e) => setSubmittedTillDate(e.target.value)}
                 />
               </div>
             </div>
           </div>
 
-          {completedLoading ? (
-            <p>Loading completions...</p>
+          {completionsLoading ? (
+            <p>Loading submissions...</p>
           ) : (
             <div className="table-container">
               <table>
@@ -672,45 +797,319 @@ export default function DashboardClient({ user }: { user: User }) {
                     <th>Part Description</th>
                     <th>Submitted By</th>
                     <th>Est. Date</th>
-                    <th>Executant Remarks</th>
-                    <th>Completion Date</th>
+                    <th>Submission Date</th>
+                    <th>Delay</th>
+                    <th>Remarks</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCompletions.length === 0 ? (
+                  {filteredSubmittedTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)' }}>
-                        No completed task records match your criteria
+                      <td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                        No submitted tasks match your criteria
                       </td>
                     </tr>
                   ) : (
-                    filteredCompletions.map((c) => (
-                      <tr key={c.id}>
-                        <td>{c.contractNo}</td>
-                        <td>{c.partNo}</td>
-                        <td>{c.partDescription}</td>
-                        <td>{c.submittedBy}</td>
-                        <td>{new Date(c.estimatedDate).toLocaleDateString()}</td>
+                    filteredSubmittedTasks.map((c) => {
+                      const delayInfo = calculateDelay(c.completionDate, c.estimatedDate);
+                      return (
+                        <tr key={c.id}>
+                          <td>
+                            {Boolean(c.isFinal) && (
+                              <span style={{ marginRight: '0.4rem', fontSize: '1rem' }} title="Completed Task">
+                                ✅
+                              </span>
+                            )}
+                            {c.contractNo}
+                          </td>
+                          <td>{c.partNo}</td>
+                          <td>{c.partDescription}</td>
+                          <td>{c.submittedBy}</td>
+                          <td>{new Date(c.estimatedDate).toLocaleDateString()}</td>
+                          <td>{new Date(c.completionDate).toLocaleDateString()}</td>
+                          <td>
+                            {delayInfo.isDelayed ? (
+                              <span style={{ color: '#ff4444', fontWeight: 600 }}>
+                                {delayInfo.text}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                {delayInfo.text}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px' }}>
+                              {c.remarks}
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-outline"
+                              style={{
+                                borderColor: '#ff4444',
+                                color: '#ff4444',
+                                padding: '0.3rem 0.6rem',
+                                fontSize: '0.8rem',
+                              }}
+                              onClick={() => handleDeleteCompletion(c.id)}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* CARD 5: COMPLETED PROJECTS (Only final tasks) */}
+      {activeCard === 'completed_projects' && canCompletedProjects && (
+        <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Completed Projects</h2>
+
+          {/* Default Predictive Search Feature */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Name</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Submitted by name..."
+                value={completedNameSearch}
+                onChange={(e) => setCompletedNameSearch(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Project</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Contract / Part No / Desc..."
+                value={completedProjectSearch}
+                onChange={(e) => setCompletedProjectSearch(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Date Range (Since / Till)</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={completedSinceDate}
+                  onChange={(e) => setCompletedSinceDate(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={completedTillDate}
+                  onChange={(e) => setCompletedTillDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {completionsLoading ? (
+            <p>Loading completed projects...</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contract No</th>
+                    <th>Part No</th>
+                    <th>Part Description</th>
+                    <th>Submitted By</th>
+                    <th>Est. Date</th>
+                    <th>Completion Date</th>
+                    <th>Delay</th>
+                    <th>Completion Remarks</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCompletedProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                        No completed projects match your criteria
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCompletedProjects.map((c) => {
+                      const delayInfo = calculateDelay(c.completionDate, c.estimatedDate);
+                      return (
+                        <tr key={c.id}>
+                          <td>
+                            <span style={{ marginRight: '0.4rem', fontSize: '1rem' }} title="Completed Task">
+                              ✅
+                            </span>
+                            {c.contractNo}
+                          </td>
+                          <td>{c.partNo}</td>
+                          <td>{c.partDescription}</td>
+                          <td>{c.submittedBy}</td>
+                          <td>{new Date(c.estimatedDate).toLocaleDateString()}</td>
+                          <td>{new Date(c.completionDate).toLocaleDateString()}</td>
+                          <td>
+                            {delayInfo.isDelayed ? (
+                              <span style={{ color: '#ff4444', fontWeight: 600 }}>
+                                {delayInfo.text}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                {delayInfo.text}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px' }}>
+                              {c.remarks}
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-outline"
+                              style={{
+                                borderColor: '#ff4444',
+                                color: '#ff4444',
+                                padding: '0.3rem 0.6rem',
+                                fontSize: '0.8rem',
+                              }}
+                              onClick={() => handleDeleteCompletion(c.id)}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* CARD 6: ABANDONED PROJECTS (No submissions) */}
+      {activeCard === 'abandoned' && canAbandoned && (
+        <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Abandoned Projects</h2>
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+            Projects assigned to team members that have received zero progress submissions.
+          </p>
+
+          {/* Default Predictive Search Feature */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Name</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Assigned team member..."
+                value={abandonedNameSearch}
+                onChange={(e) => setAbandonedNameSearch(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Project</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Contract / Part No / Desc..."
+                value={abandonedProjectSearch}
+                onChange={(e) => setAbandonedProjectSearch(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Date Range (Since / Till)</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={abandonedSinceDate}
+                  onChange={(e) => setAbandonedSinceDate(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={abandonedTillDate}
+                  onChange={(e) => setAbandonedTillDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {abandonedLoading ? (
+            <p>Loading abandoned projects...</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contract No</th>
+                    <th>Part No</th>
+                    <th>Part Description</th>
+                    <th>Assigned To</th>
+                    <th>Est. Date</th>
+                    <th>Initial Remarks</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAbandonedProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                        No abandoned projects found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAbandonedProjects.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.contractNo}</td>
+                        <td>{p.partNo}</td>
+                        <td>{p.partDescription}</td>
+                        <td>
+                          {p.assignedTo}
+                          {p.assignedToEmail && (
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                              {p.assignedToEmail}
+                            </span>
+                          )}
+                        </td>
+                        <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
                         <td>
                           <div style={{ maxHeight: '80px', overflowY: 'auto', paddingRight: '4px' }}>
-                            {c.remarks}
+                            {p.remarks}
                           </div>
                         </td>
-                        <td>{new Date(c.completionDate).toLocaleDateString()}</td>
                         <td>
-                          <button
-                            className="btn btn-outline"
+                          <span
                             style={{
-                              borderColor: '#ff4444',
-                              color: '#ff4444',
-                              padding: '0.3rem 0.6rem',
-                              fontSize: '0.8rem',
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              background: 'rgba(255, 68, 68, 0.15)',
+                              color: '#ff6b6b',
+                              border: '1px solid rgba(255, 68, 68, 0.3)',
                             }}
-                            onClick={() => handleDeleteCompletion(c.id)}
                           >
-                            Delete
-                          </button>
+                            No Submissions
+                          </span>
                         </td>
                       </tr>
                     ))
