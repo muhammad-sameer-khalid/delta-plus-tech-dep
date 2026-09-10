@@ -49,6 +49,19 @@ type AbandonedProject = {
   assignedToEmail: string;
 };
 
+type DetailedProject = {
+  id: number;
+  contractNo: string;
+  partNo: string;
+  partDescription: string;
+  estimatedDate: string;
+  remarks: string;
+  status: string;
+  assignedToId: number;
+  assignedTo: string;
+  assignedToEmail: string;
+};
+
 // Helper to get today's date in YYYY-MM-DD format (local timezone)
 function getTodayDateString() {
   const now = new Date();
@@ -155,6 +168,7 @@ export default function DashboardClient({ user }: { user: User }) {
   const canSubmitted = isSupervisor || isCoSupervisor || isDirector;
   const canCompletedProjects = isSupervisor || isCoSupervisor || isDirector;
   const canAbandoned = isSupervisor || isCoSupervisor || isDirector;
+  const canEditProject = isSupervisor || isCoSupervisor;
 
   // --- Assign Project State ---
   const [executants, setExecutants] = useState<ExecutantUser[]>([]);
@@ -208,6 +222,28 @@ export default function DashboardClient({ user }: { user: User }) {
   const [abandonedSinceDate, setAbandonedSinceDate] = useState('');
   const [abandonedTillDate, setAbandonedTillDate] = useState('');
 
+  // --- Edit Project State ---
+  const [allProjects, setAllProjects] = useState<DetailedProject[]>([]);
+  const [allProjectsLoading, setAllProjectsLoading] = useState(false);
+  const [editSearchName, setEditSearchName] = useState('');
+  const [editSearchProject, setEditSearchProject] = useState('');
+  const [editSinceDate, setEditSinceDate] = useState('');
+  const [editTillDate, setEditTillDate] = useState('');
+
+  // Modal editing state
+  const [editingProject, setEditingProject] = useState<DetailedProject | null>(null);
+  const [editForm, setEditForm] = useState({
+    contractNo: '',
+    partNo: '',
+    partDescription: '',
+    estimatedDate: '',
+    remarks: '',
+    assignedToId: 0,
+    status: 'Due',
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
   // Fetch data on card open
   useEffect(() => {
     if (activeCard === 'assign') {
@@ -247,6 +283,22 @@ export default function DashboardClient({ user }: { user: User }) {
           setAbandonedLoading(false);
         })
         .catch(console.error);
+    } else if (activeCard === 'edit_project') {
+      setAllProjectsLoading(true);
+      fetch('/api/projects')
+        .then((res) => res.json())
+        .then((data) => {
+          setAllProjects(data);
+          setAllProjectsLoading(false);
+        })
+        .catch(console.error);
+
+      if (executants.length === 0) {
+        fetch('/api/users/executants')
+          .then((res) => res.json())
+          .then((data) => setExecutants(data))
+          .catch(console.error);
+      }
     }
   }, [activeCard]);
 
@@ -335,6 +387,73 @@ export default function DashboardClient({ user }: { user: User }) {
     }
   };
 
+  const openEditModal = (p: DetailedProject) => {
+    const d = new Date(p.estimatedDate);
+    const dateStr = !isNaN(d.getTime())
+      ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      : '';
+
+    setEditForm({
+      contractNo: p.contractNo,
+      partNo: p.partNo,
+      partDescription: p.partDescription,
+      estimatedDate: dateStr,
+      remarks: p.remarks,
+      assignedToId: p.assignedToId,
+      status: p.status,
+    });
+    setEditError('');
+    setEditingProject(p);
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject) return;
+    setEditSaving(true);
+    setEditError('');
+
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingProject.id,
+          ...editForm,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        const updatedAssignee = executants.find((u) => u.id === Number(editForm.assignedToId));
+        setAllProjects((prev) =>
+          prev.map((p) =>
+            p.id === editingProject.id
+              ? {
+                  ...p,
+                  contractNo: editForm.contractNo,
+                  partNo: editForm.partNo,
+                  partDescription: editForm.partDescription,
+                  estimatedDate: editForm.estimatedDate,
+                  remarks: editForm.remarks,
+                  assignedToId: Number(editForm.assignedToId),
+                  status: editForm.status,
+                  assignedTo: updatedAssignee ? updatedAssignee.name : p.assignedTo,
+                  assignedToEmail: updatedAssignee ? updatedAssignee.email : p.assignedToEmail,
+                }
+              : p
+          )
+        );
+        setEditingProject(null);
+      } else {
+        setEditError(data.error || 'Failed to update project');
+      }
+    } catch (err) {
+      setEditError('Server error while updating project');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   // Predictive search filters
   const filteredExecutants = executants.filter((u) =>
     u.name.toLowerCase().includes(executantSearch.toLowerCase())
@@ -419,6 +538,27 @@ export default function DashboardClient({ user }: { user: User }) {
     return matchesName && matchesProject && matchesDate;
   });
 
+  // Edit Project Filter (Default search feature)
+  const filteredAllProjects = allProjects.filter((p) => {
+    const matchesName = p.assignedTo.toLowerCase().includes(editSearchName.toLowerCase());
+    const matchesProject =
+      p.contractNo.toLowerCase().includes(editSearchProject.toLowerCase()) ||
+      p.partNo.toLowerCase().includes(editSearchProject.toLowerCase()) ||
+      p.partDescription.toLowerCase().includes(editSearchProject.toLowerCase());
+
+    let matchesDate = true;
+    const estTime = new Date(p.estimatedDate).getTime();
+    if (editSinceDate) {
+      matchesDate = matchesDate && estTime >= new Date(editSinceDate).getTime();
+    }
+    if (editTillDate) {
+      const tillTime = new Date(editTillDate).setHours(23, 59, 59, 999);
+      matchesDate = matchesDate && estTime <= tillTime;
+    }
+
+    return matchesName && matchesProject && matchesDate;
+  });
+
   return (
     <div>
       {activeCard && (
@@ -484,6 +624,15 @@ export default function DashboardClient({ user }: { user: User }) {
               <h3>Abandoned Projects</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View projects with no task submissions recorded.
+              </p>
+            </div>
+          )}
+
+          {canEditProject && (
+            <div className="dash-card" onClick={() => setActiveCard('edit_project')}>
+              <h3>Edit Project</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+                View all projects and edit their details.
               </p>
             </div>
           )}
@@ -1188,6 +1337,304 @@ export default function DashboardClient({ user }: { user: User }) {
             </div>
           )}
         </section>
+      )}
+
+      {/* CARD 7: EDIT PROJECT */}
+      {activeCard === 'edit_project' && canEditProject && (
+        <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Edit Project</h2>
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+            Browse all department projects and click &quot;Edit&quot; to modify contract, part, assignee, date, or status.
+          </p>
+
+          {/* Default Predictive Search Feature */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Name</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Assigned team member..."
+                value={editSearchName}
+                onChange={(e) => setEditSearchName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Project</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Contract / Part No / Desc..."
+                value={editSearchProject}
+                onChange={(e) => setEditSearchProject(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Date Range (Since / Till)</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={editSinceDate}
+                  onChange={(e) => setEditSinceDate(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={editTillDate}
+                  onChange={(e) => setEditTillDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {allProjectsLoading ? (
+            <p>Loading projects...</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contract No</th>
+                    <th>Part No</th>
+                    <th>Part Description</th>
+                    <th>Assigned To</th>
+                    <th>Est. Date</th>
+                    <th>Remarks</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAllProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                        No projects found matching your criteria
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAllProjects.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.contractNo}</td>
+                        <td>{p.partNo}</td>
+                        <td>{p.partDescription}</td>
+                        <td>
+                          {p.assignedTo}
+                          {p.assignedToEmail && (
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                              {p.assignedToEmail}
+                            </span>
+                          )}
+                        </td>
+                        <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
+                        <td>
+                          <ExpandableRemarks text={p.remarks} />
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              background: p.status === 'Completed' ? 'rgba(200, 255, 0, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+                              color: p.status === 'Completed' ? 'var(--accent)' : 'var(--text)',
+                              border: p.status === 'Completed' ? '1px solid var(--accent)' : '1px solid var(--line)',
+                            }}
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-outline"
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.82rem' }}
+                            onClick={() => openEditModal(p)}
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* EDIT PROJECT MODAL POPUP */}
+      {editingProject && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+          onClick={() => setEditingProject(null)}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--surface)',
+              border: '1px solid var(--line)',
+              borderRadius: '8px',
+              width: '100%',
+              maxWidth: '560px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.75rem',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.8)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--accent)' }}>
+                Edit Project: {editingProject.contractNo}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingProject(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                  padding: '0 0.25rem',
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {editError && (
+              <div style={{ padding: '0.75rem', background: '#ff000022', border: '1px solid #ff4444', color: '#ff4444', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleEditSave}>
+              <div className="form-grid-2">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Contract No.</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={editForm.contractNo}
+                    onChange={(e) => setEditForm({ ...editForm, contractNo: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Part No.</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={editForm.partNo}
+                    onChange={(e) => setEditForm({ ...editForm, partNo: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Part Description</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editForm.partDescription}
+                  onChange={(e) => setEditForm({ ...editForm, partDescription: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-grid-2">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Assigned To</label>
+                  <select
+                    className="input"
+                    value={editForm.assignedToId}
+                    onChange={(e) => setEditForm({ ...editForm, assignedToId: Number(e.target.value) })}
+                    required
+                  >
+                    {!executants.some((u) => u.id === editForm.assignedToId) && (
+                      <option value={editForm.assignedToId}>
+                        {editingProject.assignedTo} (Current)
+                      </option>
+                    )}
+                    {executants.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.roles})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Status</label>
+                  <select
+                    className="input"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    required
+                  >
+                    <option value="Due">Due</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Estimated Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={editForm.estimatedDate}
+                  onChange={(e) => setEditForm({ ...editForm, estimatedDate: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Remarks / Detailed Task</label>
+                <textarea
+                  className="input"
+                  rows={4}
+                  value={editForm.remarks}
+                  onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setEditingProject(null)}
+                  disabled={editSaving}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn" disabled={editSaving}>
+                  {editSaving ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
