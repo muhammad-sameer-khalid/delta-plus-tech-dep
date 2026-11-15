@@ -1464,59 +1464,36 @@ export default function DashboardClient({ user }: { user: User }) {
                     <th>Part Description</th>
                     <th>Assigned To</th>
                     <th>Est. Date</th>
-                    <th>Remarks</th>
-                    <th>Status</th>
+                    <th>Initial Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredAssignedTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                         No assigned tasks found matching your criteria
                       </td>
                     </tr>
                   ) : (
-                    filteredAssignedTasks.map((p) => {
-                      const estTime = new Date(p.estimatedDate).getTime();
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const isOverdue = estTime < today.getTime();
-
-                      return (
-                        <tr key={p.id}>
-                          <td>{p.contractNo}</td>
-                          <td>{p.partNo}</td>
-                          <td>{p.partDescription}</td>
-                          <td>
-                            {p.assignedTo}
-                            {p.assignedToEmail && (
-                              <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
-                                {p.assignedToEmail}
-                              </span>
-                            )}
-                          </td>
-                          <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
-                          <td>
-                            <ExpandableRemarks text={p.remarks} />
-                          </td>
-                          <td>
-                            <span
-                              style={{
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                background: isOverdue ? 'rgba(255, 68, 68, 0.15)' : 'rgba(200, 255, 0, 0.15)',
-                                color: isOverdue ? '#ff6b6b' : 'var(--accent)',
-                                border: isOverdue ? '1px solid rgba(255, 68, 68, 0.3)' : '1px solid var(--accent)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {isOverdue ? 'Due (Overdue)' : (p.status || 'Due')}
+                    filteredAssignedTasks.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.contractNo}</td>
+                        <td>{p.partNo}</td>
+                        <td>{p.partDescription}</td>
+                        <td>
+                          {p.assignedTo}
+                          {p.assignedToEmail && (
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                              {p.assignedToEmail}
                             </span>
-                          </td>
-                        </tr>
-                      );
-                    })
+                          )}
+                        </td>
+                        <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
+                        <td>
+                          <ExpandableRemarks text={p.remarks} />
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>

@@ -24,7 +24,7 @@ A full-stack, role-based project management system built with Next.js (App Route
    - **Submitted Tasks**: View all submitted task progress updates and completions with default search (Name, Project, Date Range). Displays a checkmark emoji (✅) next to Contract No for completed tasks, and includes a **Delay** column ("On Time" or "X days delay").
    - **Completed Projects**: Dedicated view for Supervisor, Co-Supervisor, and Director displaying only finalized completion tasks, equipped with the default predictive search and the **Delay** column.
    - **Abandoned Projects**: Visible to Supervisor, Co-Supervisor, and Director, listing projects that have received zero submissions, equipped with the default predictive search across assignee name, project details, and estimated date range.
-   - **Assigned Tasks**: Visible to Supervisor, Co-Supervisor, and Director, displaying all department projects that are currently assigned and not completed yet, equipped with the default predictive search and overdue status indicator.
+   - **Assigned Tasks**: Visible to Supervisor, Co-Supervisor, and Director, displaying all department projects that are currently assigned and not completed yet, equipped with the default predictive search (Name, Project, Date Range) and table showing contract no, part no, part description, assigned to, est. date, and initial remarks.
    - **Edit Project**: Available to Supervisor and Co-Supervisor, displaying all projects with default predictive search and an **Edit** action button that opens an interactive modal to modify any project detail (contract, part, assignee, date, remarks, and status).
 
 4. **Notifications**:
