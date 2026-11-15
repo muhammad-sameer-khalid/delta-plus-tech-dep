@@ -333,6 +333,55 @@ export default function DashboardClient({ user }: { user: User }) {
   }, [activeCard]);
 
   // Handlers
+  const handleOpenCard = (card: string) => {
+    setActiveCard(card);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ card }, '', `/#${card}`);
+    }
+  };
+
+  const handleBackToDashboard = () => {
+    setActiveCard(null);
+    setSelectedExecutant(null);
+    setSelectedSubmitProject(null);
+    setEditingProject(null);
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.history.pushState(null, '', window.location.pathname);
+    }
+  };
+
+  useEffect(() => {
+    const handleResetToHome = () => {
+      setActiveCard(null);
+      setSelectedExecutant(null);
+      setSelectedSubmitProject(null);
+      setEditingProject(null);
+      if (typeof window !== 'undefined' && window.location.hash) {
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    };
+
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      setActiveCard(hash || null);
+    };
+
+    window.addEventListener('nav-home-click', handleResetToHome);
+    window.addEventListener('popstate', handlePopState);
+
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setActiveCard(hash);
+      }
+    }
+
+    return () => {
+      window.removeEventListener('nav-home-click', handleResetToHome);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedExecutant) return;
@@ -614,7 +663,7 @@ export default function DashboardClient({ user }: { user: User }) {
     <div>
       {activeCard && (
         <button
-          onClick={() => setActiveCard(null)}
+          onClick={handleBackToDashboard}
           className="btn btn-outline"
           style={{ marginBottom: '1.5rem' }}
         >
@@ -626,7 +675,7 @@ export default function DashboardClient({ user }: { user: User }) {
       {!activeCard && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
           {canAssign && (
-            <div className="dash-card" onClick={() => setActiveCard('assign')}>
+            <div className="dash-card" onClick={() => handleOpenCard('assign')}>
               <h3>Assign Project</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 Assign new tasks to executants & co-supervisors.
@@ -635,7 +684,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canDue && (
-            <div className="dash-card" onClick={() => setActiveCard('due')}>
+            <div className="dash-card" onClick={() => handleOpenCard('due')}>
               <h3>Due Projects</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View your active assigned projects.
@@ -644,7 +693,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canSubmit && (
-            <div className="dash-card" onClick={() => setActiveCard('submit')}>
+            <div className="dash-card" onClick={() => handleOpenCard('submit')}>
               <h3>Submit Task</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 Submit task progress or mark complete.
@@ -653,7 +702,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canSubmitted && (
-            <div className="dash-card" onClick={() => setActiveCard('submitted')}>
+            <div className="dash-card" onClick={() => handleOpenCard('submitted')}>
               <h3>Submitted Tasks</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View all submitted progress and final task reports.
@@ -662,7 +711,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canCompletedProjects && (
-            <div className="dash-card" onClick={() => setActiveCard('completed_projects')}>
+            <div className="dash-card" onClick={() => handleOpenCard('completed_projects')}>
               <h3>Completed Projects</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View finalized projects where completion was confirmed.
@@ -671,7 +720,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canAbandoned && (
-            <div className="dash-card" onClick={() => setActiveCard('abandoned')}>
+            <div className="dash-card" onClick={() => handleOpenCard('abandoned')}>
               <h3>Abandoned Projects</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View projects with no task submissions recorded.
@@ -680,7 +729,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canAssignedTasks && (
-            <div className="dash-card" onClick={() => setActiveCard('assigned_tasks')}>
+            <div className="dash-card" onClick={() => handleOpenCard('assigned_tasks')}>
               <h3>Assigned Tasks</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View all ongoing assigned tasks that are not completed yet.
@@ -689,7 +738,7 @@ export default function DashboardClient({ user }: { user: User }) {
           )}
 
           {canEditProject && (
-            <div className="dash-card" onClick={() => setActiveCard('edit_project')}>
+            <div className="dash-card" onClick={() => handleOpenCard('edit_project')}>
               <h3>Edit Project</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View all projects and edit their details.

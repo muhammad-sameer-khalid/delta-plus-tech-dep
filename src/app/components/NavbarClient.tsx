@@ -23,9 +23,20 @@ export default function NavbarClient({
     window.location.href = '/login';
   };
 
+  const handleHomeClick = () => {
+    setIsOpen(false);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nav-home-click'));
+      if (window.location.pathname === '/') {
+        window.history.pushState(null, '', '/');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  };
+
   return (
     <header className="navbar">
-      <Link className="brand" href="/">
+      <Link className="brand" href="/" onClick={handleHomeClick}>
         <img className="brand-logo" src="/logo.png" alt="Delta Plus logo" />
         <span className="brand-text">
           <span className="brand-name">Delta Plus</span>
@@ -33,21 +44,21 @@ export default function NavbarClient({
         </span>
       </Link>
 
-      <button className="nav-toggle" onClick={() => setIsOpen(!isOpen)}>
+      <button className="nav-toggle" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle navigation">
         <span></span>
         <span></span>
         <span></span>
       </button>
 
       <nav className={`nav-links ${isOpen ? 'open' : ''}`}>
-        <Link href="/">Home</Link>
+        <Link href="/" onClick={handleHomeClick}>Home</Link>
         {user && (user.roles.includes('Supervisor') || user.roles.includes('Co-Supervisor')) && (
-          <Link href="/admin">Admin</Link>
+          <Link href="/admin" onClick={() => setIsOpen(false)}>Admin</Link>
         )}
 
         {user ? (
           <>
-            <Link href="/notifications" className="notification-bell">
+            <Link href="/notifications" className="notification-bell" onClick={() => setIsOpen(false)}>
               <Bell size={20} />
               {initialUnreadCount > 0 && (
                 <span className="notification-dot">{initialUnreadCount}</span>
@@ -58,7 +69,7 @@ export default function NavbarClient({
             </a>
           </>
         ) : (
-          <Link href="/login">Login</Link>
+          <Link href="/login" onClick={() => setIsOpen(false)}>Login</Link>
         )}
       </nav>
     </header>
