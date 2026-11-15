@@ -7,9 +7,9 @@ A full-stack, role-based project management system built with Next.js (App Route
 ## 🌟 Key Features
 
 1. **Role-Based Access Control**:
-   - **Director**: View completed task reports and completions.
-   - **Supervisor**: Full access to Admin Panel (manage accounts & roles, change passwords), Assign Projects, and view Completed Tasks.
-   - **Co-Supervisor**: Admin Panel, Assign Projects, View Due Projects, Submit Tasks, and view Completed Tasks.
+   - **Director**: View completed task reports and completions, abandoned projects, and assigned tasks.
+   - **Supervisor**: Full access to Admin Panel (manage accounts & roles, change passwords), Assign Projects, Assigned Tasks, Edit Projects, and view Completed Tasks.
+   - **Co-Supervisor**: Admin Panel, Assign Projects, View Due Projects, Submit Tasks, Assigned Tasks, Edit Projects, and view Completed Tasks.
    - **Executant**: View assigned Due Projects and Submit Task updates/completions.
 
 2. **Admin Panel (`/admin`)**:
@@ -24,6 +24,7 @@ A full-stack, role-based project management system built with Next.js (App Route
    - **Submitted Tasks**: View all submitted task progress updates and completions with default search (Name, Project, Date Range). Displays a checkmark emoji (✅) next to Contract No for completed tasks, and includes a **Delay** column ("On Time" or "X days delay").
    - **Completed Projects**: Dedicated view for Supervisor, Co-Supervisor, and Director displaying only finalized completion tasks, equipped with the default predictive search and the **Delay** column.
    - **Abandoned Projects**: Visible to Supervisor, Co-Supervisor, and Director, listing projects that have received zero submissions, equipped with the default predictive search across assignee name, project details, and estimated date range.
+   - **Assigned Tasks**: Visible to Supervisor, Co-Supervisor, and Director, displaying all department projects that are currently assigned and not completed yet, equipped with the default predictive search and overdue status indicator.
    - **Edit Project**: Available to Supervisor and Co-Supervisor, displaying all projects with default predictive search and an **Edit** action button that opens an interactive modal to modify any project detail (contract, part, assignee, date, remarks, and status).
 
 4. **Notifications**:

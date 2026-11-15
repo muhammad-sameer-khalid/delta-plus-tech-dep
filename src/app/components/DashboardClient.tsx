@@ -49,6 +49,18 @@ type AbandonedProject = {
   assignedToEmail: string;
 };
 
+type AssignedTask = {
+  id: number;
+  contractNo: string;
+  partNo: string;
+  partDescription: string;
+  estimatedDate: string;
+  remarks: string;
+  status: string;
+  assignedTo: string;
+  assignedToEmail: string;
+};
+
 type DetailedProject = {
   id: number;
   contractNo: string;
@@ -168,6 +180,7 @@ export default function DashboardClient({ user }: { user: User }) {
   const canSubmitted = isSupervisor || isCoSupervisor || isDirector;
   const canCompletedProjects = isSupervisor || isCoSupervisor || isDirector;
   const canAbandoned = isSupervisor || isCoSupervisor || isDirector;
+  const canAssignedTasks = isSupervisor || isCoSupervisor || isDirector;
   const canEditProject = isSupervisor || isCoSupervisor;
 
   // --- Assign Project State ---
@@ -221,6 +234,14 @@ export default function DashboardClient({ user }: { user: User }) {
   const [abandonedProjectSearch, setAbandonedProjectSearch] = useState('');
   const [abandonedSinceDate, setAbandonedSinceDate] = useState('');
   const [abandonedTillDate, setAbandonedTillDate] = useState('');
+
+  // --- Assigned Tasks State ---
+  const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([]);
+  const [assignedLoading, setAssignedLoading] = useState(false);
+  const [assignedNameSearch, setAssignedNameSearch] = useState('');
+  const [assignedProjectSearch, setAssignedProjectSearch] = useState('');
+  const [assignedSinceDate, setAssignedSinceDate] = useState('');
+  const [assignedTillDate, setAssignedTillDate] = useState('');
 
   // --- Edit Project State ---
   const [allProjects, setAllProjects] = useState<DetailedProject[]>([]);
@@ -281,6 +302,15 @@ export default function DashboardClient({ user }: { user: User }) {
         .then((data) => {
           setAbandonedProjects(data);
           setAbandonedLoading(false);
+        })
+        .catch(console.error);
+    } else if (activeCard === 'assigned_tasks') {
+      setAssignedLoading(true);
+      fetch('/api/projects/assigned')
+        .then((res) => res.json())
+        .then((data) => {
+          setAssignedTasks(data);
+          setAssignedLoading(false);
         })
         .catch(console.error);
     } else if (activeCard === 'edit_project') {
@@ -538,6 +568,27 @@ export default function DashboardClient({ user }: { user: User }) {
     return matchesName && matchesProject && matchesDate;
   });
 
+  // Assigned Tasks Filter (Default search feature)
+  const filteredAssignedTasks = assignedTasks.filter((p) => {
+    const matchesName = p.assignedTo.toLowerCase().includes(assignedNameSearch.toLowerCase());
+    const matchesProject =
+      p.contractNo.toLowerCase().includes(assignedProjectSearch.toLowerCase()) ||
+      p.partNo.toLowerCase().includes(assignedProjectSearch.toLowerCase()) ||
+      p.partDescription.toLowerCase().includes(assignedProjectSearch.toLowerCase());
+
+    let matchesDate = true;
+    const estTime = new Date(p.estimatedDate).getTime();
+    if (assignedSinceDate) {
+      matchesDate = matchesDate && estTime >= new Date(assignedSinceDate).getTime();
+    }
+    if (assignedTillDate) {
+      const tillTime = new Date(assignedTillDate).setHours(23, 59, 59, 999);
+      matchesDate = matchesDate && estTime <= tillTime;
+    }
+
+    return matchesName && matchesProject && matchesDate;
+  });
+
   // Edit Project Filter (Default search feature)
   const filteredAllProjects = allProjects.filter((p) => {
     const matchesName = p.assignedTo.toLowerCase().includes(editSearchName.toLowerCase());
@@ -624,6 +675,15 @@ export default function DashboardClient({ user }: { user: User }) {
               <h3>Abandoned Projects</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View projects with no task submissions recorded.
+              </p>
+            </div>
+          )}
+
+          {canAssignedTasks && (
+            <div className="dash-card" onClick={() => setActiveCard('assigned_tasks')}>
+              <h3>Assigned Tasks</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+                View all ongoing assigned tasks that are not completed yet.
               </p>
             </div>
           )}
@@ -1339,7 +1399,133 @@ export default function DashboardClient({ user }: { user: User }) {
         </section>
       )}
 
-      {/* CARD 7: EDIT PROJECT */}
+      {/* CARD 7: ASSIGNED TASKS (Not completed yet) */}
+      {activeCard === 'assigned_tasks' && canAssignedTasks && (
+        <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Assigned Tasks</h2>
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+            All ongoing tasks assigned to team members that are not completed yet.
+          </p>
+
+          {/* Default Predictive Search Feature */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Name</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Assigned team member..."
+                value={assignedNameSearch}
+                onChange={(e) => setAssignedNameSearch(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Search by Project</label>
+              <input
+                type="text"
+                className="input"
+                style={{ marginBottom: 0 }}
+                placeholder="Contract / Part No / Desc..."
+                value={assignedProjectSearch}
+                onChange={(e) => setAssignedProjectSearch(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>Date Range (Since / Till)</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={assignedSinceDate}
+                  onChange={(e) => setAssignedSinceDate(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={assignedTillDate}
+                  onChange={(e) => setAssignedTillDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {assignedLoading ? (
+            <p>Loading assigned tasks...</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contract No</th>
+                    <th>Part No</th>
+                    <th>Part Description</th>
+                    <th>Assigned To</th>
+                    <th>Est. Date</th>
+                    <th>Remarks</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAssignedTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                        No assigned tasks found matching your criteria
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAssignedTasks.map((p) => {
+                      const estTime = new Date(p.estimatedDate).getTime();
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const isOverdue = estTime < today.getTime();
+
+                      return (
+                        <tr key={p.id}>
+                          <td>{p.contractNo}</td>
+                          <td>{p.partNo}</td>
+                          <td>{p.partDescription}</td>
+                          <td>
+                            {p.assignedTo}
+                            {p.assignedToEmail && (
+                              <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                                {p.assignedToEmail}
+                              </span>
+                            )}
+                          </td>
+                          <td>{new Date(p.estimatedDate).toLocaleDateString()}</td>
+                          <td>
+                            <ExpandableRemarks text={p.remarks} />
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                background: isOverdue ? 'rgba(255, 68, 68, 0.15)' : 'rgba(200, 255, 0, 0.15)',
+                                color: isOverdue ? '#ff6b6b' : 'var(--accent)',
+                                border: isOverdue ? '1px solid rgba(255, 68, 68, 0.3)' : '1px solid var(--accent)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {isOverdue ? 'Due (Overdue)' : (p.status || 'Due')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* CARD 8: EDIT PROJECT */}
       {activeCard === 'edit_project' && canEditProject && (
         <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
           <h2 style={{ color: 'var(--accent)', marginBottom: '1rem' }}>Edit Project</h2>
