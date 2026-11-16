@@ -124,6 +124,27 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
+// Automatically retry fetch requests on transient network or server/DB connection drops
+async function fetchWithAutoRetry(url: string, options?: RequestInit, maxRetries = 2): Promise<Response> {
+  let lastError: any = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if ([502, 503, 504].includes(res.status) && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError || new Error(`Network request failed for ${url}`);
+}
+
 // Expandable Remarks Component with scrollbar and expand / show less toggle
 function ExpandableRemarks({ text }: { text: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -206,6 +227,8 @@ function calculateDelay(submissionDateStr: string, estimatedDateStr: string) {
 
 export default function DashboardClient({ user }: { user: User }) {
   const [activeCard, setActiveCard] = useState<string | null>(null);
+  const [cardError, setCardError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
 
   // User roles parsing
   const rolesList = user.roles.split(',').map((r) => r.trim());
@@ -335,64 +358,112 @@ export default function DashboardClient({ user }: { user: User }) {
 
   // Fetch data on card open
   useEffect(() => {
+    setCardError('');
     if (activeCard === 'assign') {
-      fetch('/api/users/executants')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/users/executants')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load executants');
+          return res.json();
+        })
         .then((data) => setExecutants(data))
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setCardError('Connection issue: Failed to load executants list. Service may be reconnecting.');
+        });
     } else if (activeCard === 'due') {
       setDueLoading(true);
-      fetch('/api/projects/due')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/projects/due')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load due projects');
+          return res.json();
+        })
         .then((data) => {
           setDueProjects(data);
           setDueLoading(false);
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setDueLoading(false);
+          setCardError('Connection interrupted while loading due projects. Please click Retry.');
+        });
     } else if (activeCard === 'submit') {
-      fetch('/api/projects/due')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/projects/due')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load projects');
+          return res.json();
+        })
         .then((data) => setSubmitProjects(data))
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setCardError('Connection interrupted while loading projects. Please click Retry.');
+        });
     } else if (activeCard === 'submitted' || activeCard === 'completed_projects') {
       setCompletionsLoading(true);
-      fetch('/api/submissions/completed')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/submissions/completed')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load submissions');
+          return res.json();
+        })
         .then((data) => {
           setCompletions(data);
           setCompletionsLoading(false);
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setCompletionsLoading(false);
+          setCardError('Connection interrupted while loading submitted tasks. Please click Retry.');
+        });
     } else if (activeCard === 'abandoned') {
       setAbandonedLoading(true);
-      fetch('/api/projects/abandoned')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/projects/abandoned')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load abandoned projects');
+          return res.json();
+        })
         .then((data) => {
           setAbandonedProjects(data);
           setAbandonedLoading(false);
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setAbandonedLoading(false);
+          setCardError('Connection interrupted while loading abandoned projects. Please click Retry.');
+        });
     } else if (activeCard === 'assigned_tasks') {
       setAssignedLoading(true);
-      fetch('/api/projects/assigned')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/projects/assigned')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load assigned tasks');
+          return res.json();
+        })
         .then((data) => {
           setAssignedTasks(data);
           setAssignedLoading(false);
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setAssignedLoading(false);
+          setCardError('Connection interrupted while loading assigned tasks. Please click Retry.');
+        });
     } else if (activeCard === 'edit_project') {
       setAllProjectsLoading(true);
-      fetch('/api/projects')
-        .then((res) => res.json())
+      fetchWithAutoRetry('/api/projects')
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to load projects');
+          return res.json();
+        })
         .then((data) => {
           setAllProjects(data);
           setAllProjectsLoading(false);
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          setAllProjectsLoading(false);
+          setCardError('Connection interrupted while loading projects. Please click Retry.');
+        });
 
       if (executants.length === 0) {
-        fetch('/api/users/executants')
+        fetchWithAutoRetry('/api/users/executants')
           .then((res) => res.json())
           .then((data) => setExecutants(data))
           .catch(console.error);
@@ -400,8 +471,11 @@ export default function DashboardClient({ user }: { user: User }) {
     } else if (activeCard === 'performance_analysis') {
       if (perfUsers.length === 0) {
         setPerfUsersLoading(true);
-        fetch('/api/performance?action=users')
-          .then((res) => res.json())
+        fetchWithAutoRetry('/api/performance?action=users')
+          .then((res) => {
+            if (!res.ok) throw new Error('Failed to load users');
+            return res.json();
+          })
           .then((data) => {
             if (data.users) setPerfUsers(data.users);
             setPerfUsersLoading(false);
@@ -409,10 +483,11 @@ export default function DashboardClient({ user }: { user: User }) {
           .catch((err) => {
             console.error(err);
             setPerfUsersLoading(false);
+            setCardError('Connection interrupted while loading employees list. Please click Retry.');
           });
       }
     }
-  }, [activeCard, perfUsers.length]);
+  }, [activeCard, perfUsers.length, reloadToken]);
 
   // Fetch performance data when activeCard is performance_analysis and employee/dates change
   useEffect(() => {
@@ -429,7 +504,7 @@ export default function DashboardClient({ user }: { user: User }) {
     if (perfFromDate) params.set('from', perfFromDate);
     if (perfTillDate) params.set('till', perfTillDate);
 
-    fetch(`/api/performance?${params.toString()}`)
+    fetchWithAutoRetry(`/api/performance?${params.toString()}`)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch performance analysis');
         return res.json();
@@ -440,10 +515,10 @@ export default function DashboardClient({ user }: { user: User }) {
       })
       .catch((err) => {
         console.error(err);
-        setPerfError(err.message || 'Error loading performance analysis');
+        setPerfError('Connection interrupted while loading performance metrics. Service may be reconnecting.');
         setPerfDataLoading(false);
       });
-  }, [activeCard, selectedPerfUser, perfFromDate, perfTillDate]);
+  }, [activeCard, selectedPerfUser, perfFromDate, perfTillDate, reloadToken]);
 
   // Handlers
   const handleOpenCard = (card: string) => {
@@ -459,6 +534,7 @@ export default function DashboardClient({ user }: { user: User }) {
     setSelectedSubmitProject(null);
     setEditingProject(null);
     setPerfDropdownOpen(false);
+    setCardError('');
     if (typeof window !== 'undefined' && window.location.hash) {
       window.history.pushState(null, '', window.location.pathname);
     }
@@ -471,6 +547,7 @@ export default function DashboardClient({ user }: { user: User }) {
       setSelectedSubmitProject(null);
       setEditingProject(null);
       setPerfDropdownOpen(false);
+      setCardError('');
       if (typeof window !== 'undefined' && window.location.hash) {
         window.history.pushState(null, '', window.location.pathname);
       }
@@ -824,6 +901,43 @@ export default function DashboardClient({ user }: { user: User }) {
         >
           &larr; Back to Dashboard Cards
         </button>
+      )}
+
+      {/* Connection Error Banner with Retry */}
+      {activeCard && cardError && (
+        <div
+          style={{
+            padding: '0.85rem 1.25rem',
+            background: 'rgba(255, 68, 68, 0.15)',
+            border: '1px solid #ff4444',
+            color: '#ff4444',
+            borderRadius: '6px',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '1rem',
+          }}
+        >
+          <span>⚠️ {cardError}</span>
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{
+              padding: '0.3rem 0.8rem',
+              fontSize: '0.8rem',
+              borderColor: '#ff4444',
+              color: '#ff4444',
+              whiteSpace: 'nowrap',
+            }}
+            onClick={() => {
+              setCardError('');
+              setReloadToken((prev) => prev + 1);
+            }}
+          >
+            ↻ Retry Connection
+          </button>
+        </div>
       )}
 
       {/* Main Dashboard Cards View */}

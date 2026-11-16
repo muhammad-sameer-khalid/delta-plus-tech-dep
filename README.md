@@ -13,7 +13,8 @@ A full-stack, role-based project management system built with Next.js (App Route
    - **Executant**: View assigned Due Projects and Submit Task updates/completions.
 
 2. **Admin Panel (`/admin`)**:
-   - **Account & Roles Table**: Displays all accounts, their assigned roles (separated by `,`), and user names.
+   - **Account & Roles Table**: Displays all accounts, their assigned roles (separated by `,`), and user names, along with quick-action buttons to edit names or passwords.
+   - **Update Account Name**: Change the full display name of any account based on their registered Gmail address.
    - **Role Management**: Add or remove roles for an account. If a role already exists, saving removes it (if it was the last role, the account is deleted). Adding new roles appends them separated by commas. Creating a role for a new email automatically generates the account with default password.
    - **Update Password**: Update password for any email account.
 
@@ -30,6 +31,12 @@ A full-stack, role-based project management system built with Next.js (App Route
 
 4. **Notifications**:
    - Dynamic notification bell in navbar with unread red dot indicator.
+
+5. **Database Resilience & Memory Protection**:
+   - **Prisma Client Singleton**: Global singleton across all environments prevents connection pool multiplication and avoids cloud PostgreSQL Out of Memory (OOM) process termination.
+   - **Automatic Query Retries**: Server-side queries automatically detect transient network drops, pool timeouts, and PostgreSQL restarts following OOM recovery with exponential backoff (up to 3 retries).
+   - **Client-Side Auto-Retry**: Frontend data fetching automatically retries on transient network or 502/503/504 errors, with user-facing "Retry Connection" recovery banners to prevent stuck loading states.
+   - **Cloud PostgreSQL Recommendation**: On cloud instances with tight RAM limits (e.g. 512MB RAM), append `?connection_limit=5&pool_timeout=10` to your `DATABASE_URL` to cap connection pool memory overhead.
 
 ---
 
