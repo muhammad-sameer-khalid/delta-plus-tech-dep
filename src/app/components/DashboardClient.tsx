@@ -74,6 +74,47 @@ type DetailedProject = {
   assignedToEmail: string;
 };
 
+type PerformanceUser = {
+  id: number;
+  name: string;
+  email: string;
+  roles: string;
+};
+
+type PerformanceTaskItem = {
+  id: number;
+  contractNo: string;
+  partNo: string;
+  partDescription: string;
+  submittedBy: string;
+  submittedByEmail: string;
+  estimatedDate: string;
+  submissionDate: string;
+  isFinal: boolean;
+  remarks: string;
+  isDelayed: boolean;
+  delayDays: number;
+  delayText: string;
+};
+
+type PerformanceData = {
+  user: PerformanceUser;
+  onTimeCount: number;
+  delayedCount: number;
+  totalCount: number;
+  onTimeRate: number;
+  delayedRate: number;
+  tasks: PerformanceTaskItem[];
+};
+
+// Helper to format date in YYYY-MM-DD
+function formatDateForInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Helper to get today's date in YYYY-MM-DD format (local timezone)
 function getTodayDateString() {
   const now = new Date();
@@ -182,6 +223,7 @@ export default function DashboardClient({ user }: { user: User }) {
   const canAbandoned = isSupervisor || isCoSupervisor || isDirector;
   const canAssignedTasks = isSupervisor || isCoSupervisor || isDirector;
   const canEditProject = isSupervisor || isCoSupervisor;
+  const canPerformanceAnalysis = isSupervisor || isCoSupervisor || isDirector;
 
   // --- Assign Project State ---
   const [executants, setExecutants] = useState<ExecutantUser[]>([]);
@@ -265,6 +307,32 @@ export default function DashboardClient({ user }: { user: User }) {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
+  // --- Performance Analysis State ---
+  const [perfUsers, setPerfUsers] = useState<PerformanceUser[]>([]);
+  const [perfUsersLoading, setPerfUsersLoading] = useState(false);
+  const [perfEmployeeSearch, setPerfEmployeeSearch] = useState('');
+  const [selectedPerfUser, setSelectedPerfUser] = useState<PerformanceUser | null>(null);
+  const [perfDropdownOpen, setPerfDropdownOpen] = useState(false);
+  const [perfFromDate, setPerfFromDate] = useState('');
+  const [perfTillDate, setPerfTillDate] = useState('');
+  const [perfData, setPerfData] = useState<PerformanceData | null>(null);
+  const [perfDataLoading, setPerfDataLoading] = useState(false);
+  const [perfError, setPerfError] = useState('');
+  const perfDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close employee dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (perfDropdownRef.current && !perfDropdownRef.current.contains(event.target as Node)) {
+        setPerfDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Fetch data on card open
   useEffect(() => {
     if (activeCard === 'assign') {
@@ -329,8 +397,53 @@ export default function DashboardClient({ user }: { user: User }) {
           .then((data) => setExecutants(data))
           .catch(console.error);
       }
+    } else if (activeCard === 'performance_analysis') {
+      if (perfUsers.length === 0) {
+        setPerfUsersLoading(true);
+        fetch('/api/performance?action=users')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.users) setPerfUsers(data.users);
+            setPerfUsersLoading(false);
+          })
+          .catch((err) => {
+            console.error(err);
+            setPerfUsersLoading(false);
+          });
+      }
     }
-  }, [activeCard]);
+  }, [activeCard, perfUsers.length]);
+
+  // Fetch performance data when activeCard is performance_analysis and employee/dates change
+  useEffect(() => {
+    if (activeCard !== 'performance_analysis' || !selectedPerfUser) {
+      setPerfData(null);
+      return;
+    }
+
+    setPerfDataLoading(true);
+    setPerfError('');
+
+    const params = new URLSearchParams();
+    params.set('userId', selectedPerfUser.id.toString());
+    if (perfFromDate) params.set('from', perfFromDate);
+    if (perfTillDate) params.set('till', perfTillDate);
+
+    fetch(`/api/performance?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch performance analysis');
+        return res.json();
+      })
+      .then((data) => {
+        setPerfData(data);
+        setPerfDataLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setPerfError(err.message || 'Error loading performance analysis');
+        setPerfDataLoading(false);
+      });
+  }, [activeCard, selectedPerfUser, perfFromDate, perfTillDate]);
 
   // Handlers
   const handleOpenCard = (card: string) => {
@@ -345,6 +458,7 @@ export default function DashboardClient({ user }: { user: User }) {
     setSelectedExecutant(null);
     setSelectedSubmitProject(null);
     setEditingProject(null);
+    setPerfDropdownOpen(false);
     if (typeof window !== 'undefined' && window.location.hash) {
       window.history.pushState(null, '', window.location.pathname);
     }
@@ -356,6 +470,7 @@ export default function DashboardClient({ user }: { user: User }) {
       setSelectedExecutant(null);
       setSelectedSubmitProject(null);
       setEditingProject(null);
+      setPerfDropdownOpen(false);
       if (typeof window !== 'undefined' && window.location.hash) {
         window.history.pushState(null, '', window.location.pathname);
       }
@@ -659,6 +774,46 @@ export default function DashboardClient({ user }: { user: User }) {
     return matchesName && matchesProject && matchesDate;
   });
 
+  // Performance Analysis quick date range helper
+  const setQuickDateRange = (type: 'this_month' | 'last_30' | 'last_90' | 'this_year' | 'all') => {
+    const today = new Date();
+    const todayStr = getTodayDateString();
+
+    if (type === 'all') {
+      setPerfFromDate('');
+      setPerfTillDate('');
+    } else if (type === 'this_month') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setPerfFromDate(formatDateForInput(firstDay));
+      setPerfTillDate(todayStr);
+    } else if (type === 'last_30') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      setPerfFromDate(formatDateForInput(d));
+      setPerfTillDate(todayStr);
+    } else if (type === 'last_90') {
+      const d = new Date();
+      d.setDate(d.getDate() - 90);
+      setPerfFromDate(formatDateForInput(d));
+      setPerfTillDate(todayStr);
+    } else if (type === 'this_year') {
+      const firstDayYear = new Date(today.getFullYear(), 0, 1);
+      setPerfFromDate(formatDateForInput(firstDayYear));
+      setPerfTillDate(todayStr);
+    }
+  };
+
+  // Filter users matching employee search in Performance Analysis
+  const filteredPerfUsers = perfUsers.filter((u) => {
+    const query = perfEmployeeSearch.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      u.name.toLowerCase().includes(query) ||
+      u.email.toLowerCase().includes(query) ||
+      u.roles.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div>
       {activeCard && (
@@ -742,6 +897,15 @@ export default function DashboardClient({ user }: { user: User }) {
               <h3>Edit Project</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
                 View all projects and edit their details.
+              </p>
+            </div>
+          )}
+
+          {canPerformanceAnalysis && (
+            <div className="dash-card" onClick={() => handleOpenCard('performance_analysis')}>
+              <h3>Performance Analysis</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+                Employee performance bar graphs comparing delayed vs. on-time tasks.
               </p>
             </div>
           )}
@@ -1674,6 +1838,752 @@ export default function DashboardClient({ user }: { user: User }) {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* CARD 9: PERFORMANCE ANALYSIS */}
+      {activeCard === 'performance_analysis' && canPerformanceAnalysis && (
+        <section className="panel" style={{ borderTop: 'none', padding: 0 }}>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '0.5rem' }}>Performance Analysis</h2>
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Analyze employee task completion performance with delayed vs. on-time bar graphs across any date range.
+          </p>
+
+          {/* 3 Input Fields Container */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--line)',
+              borderRadius: '8px',
+              padding: '1.25rem',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '1rem',
+                alignItems: 'start',
+              }}
+            >
+              {/* Field 1: Employee Name with Predictive Dropdown */}
+              <div ref={perfDropdownRef} style={{ position: 'relative' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: 'var(--muted)',
+                    marginBottom: '0.35rem',
+                  }}
+                >
+                  Employee Name {selectedPerfUser ? <span style={{ color: 'var(--accent)' }}>✓ Selected</span> : ''}
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    className="input"
+                    style={{
+                      marginBottom: 0,
+                      paddingRight: selectedPerfUser ? '2.5rem' : '1rem',
+                      borderColor: selectedPerfUser ? 'var(--accent)' : undefined,
+                    }}
+                    placeholder={perfUsersLoading ? 'Loading employees...' : 'Type employee name...'}
+                    value={perfEmployeeSearch}
+                    onChange={(e) => {
+                      setPerfEmployeeSearch(e.target.value);
+                      setPerfDropdownOpen(true);
+                      if (selectedPerfUser && e.target.value.toLowerCase() !== selectedPerfUser.name.toLowerCase()) {
+                        setSelectedPerfUser(null);
+                      }
+                    }}
+                    onFocus={() => setPerfDropdownOpen(true)}
+                  />
+                  {selectedPerfUser && (
+                    <button
+                      type="button"
+                      title="Clear selected employee"
+                      onClick={() => {
+                        setSelectedPerfUser(null);
+                        setPerfEmployeeSearch('');
+                        setPerfDropdownOpen(true);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--muted)',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        padding: '2px 6px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown List */}
+                {perfDropdownOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      background: '#161616',
+                      border: '1px solid var(--line)',
+                      borderRadius: '6px',
+                      boxShadow: '0 12px 28px rgba(0, 0, 0, 0.75)',
+                      maxHeight: '230px',
+                      overflowY: 'auto',
+                      zIndex: 200,
+                    }}
+                  >
+                    {filteredPerfUsers.length === 0 ? (
+                      <div style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.85rem' }}>
+                        No employees found matching &quot;{perfEmployeeSearch}&quot;
+                      </div>
+                    ) : (
+                      filteredPerfUsers.map((u) => {
+                        const isSelected = selectedPerfUser?.id === u.id;
+                        return (
+                          <div
+                            key={u.id}
+                            onClick={() => {
+                              setSelectedPerfUser(u);
+                              setPerfEmployeeSearch(u.name);
+                              setPerfDropdownOpen(false);
+                            }}
+                            style={{
+                              padding: '0.65rem 1rem',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #222',
+                              background: isSelected ? 'rgba(200, 255, 0, 0.12)' : 'transparent',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) e.currentTarget.style.background = '#222';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 600,
+                                fontSize: '0.9rem',
+                                color: isSelected ? 'var(--accent)' : 'var(--text)',
+                              }}
+                            >
+                              {u.name}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
+                              {u.email} &bull; <span style={{ color: 'var(--accent)' }}>{u.roles}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Field 2: From Date */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: 'var(--muted)',
+                    marginBottom: '0.35rem',
+                  }}
+                >
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={perfFromDate}
+                  onChange={(e) => setPerfFromDate(e.target.value)}
+                />
+              </div>
+
+              {/* Field 3: Till Date */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: 'var(--muted)',
+                    marginBottom: '0.35rem',
+                  }}
+                >
+                  Till Date
+                </label>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ marginBottom: 0, padding: '0.5rem' }}
+                  value={perfTillDate}
+                  onChange={(e) => setPerfTillDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Quick Date Presets */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                flexWrap: 'wrap',
+                marginTop: '1rem',
+                paddingTop: '0.75rem',
+                borderTop: '1px solid var(--line)',
+              }}
+            >
+              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Quick Range:</span>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                onClick={() => setQuickDateRange('last_30')}
+              >
+                Last 30 Days
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                onClick={() => setQuickDateRange('this_month')}
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                onClick={() => setQuickDateRange('last_90')}
+              >
+                Last 3 Months
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                onClick={() => setQuickDateRange('this_year')}
+              >
+                This Year
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                onClick={() => setQuickDateRange('all')}
+              >
+                All Time
+              </button>
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {perfError && (
+            <div
+              style={{
+                padding: '0.75rem 1rem',
+                background: 'rgba(255, 68, 68, 0.15)',
+                border: '1px solid #ff4444',
+                color: '#ff4444',
+                borderRadius: '6px',
+                marginBottom: '1.5rem',
+                fontSize: '0.88rem',
+              }}
+            >
+              {perfError}
+            </div>
+          )}
+
+          {/* Prompt state if no employee selected */}
+          {!selectedPerfUser && (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '3rem 1.5rem',
+                background: 'var(--surface)',
+                border: '1px dashed var(--line)',
+                borderRadius: '8px',
+                color: 'var(--muted)',
+              }}
+            >
+              <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text)' }}>
+                Select an employee from the dropdown above
+              </p>
+              <p style={{ fontSize: '0.85rem' }}>
+                Start typing any employee&apos;s name in the employee field to view their on-time vs. delayed task performance.
+              </p>
+            </div>
+          )}
+
+          {/* Loading state when fetching performance data */}
+          {selectedPerfUser && perfDataLoading && (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+              <p style={{ color: 'var(--muted)' }}>
+                Loading performance metrics for <strong style={{ color: 'var(--text)' }}>{selectedPerfUser.name}</strong>...
+              </p>
+            </div>
+          )}
+
+          {/* Performance Data View */}
+          {selectedPerfUser && !perfDataLoading && perfData && (
+            <div>
+              {/* Summary Numbers Cards */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '1.5rem',
+                }}
+              >
+                {/* Stat 1: Total Tasks */}
+                <div
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '8px',
+                    padding: '1.25rem',
+                  }}
+                >
+                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Total Tasks Submitted
+                  </div>
+                  <div style={{ fontSize: '2.4rem', fontWeight: 700, margin: '0.4rem 0 0.1rem 0' }}>
+                    {perfData.totalCount}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                    Total recorded in period
+                  </div>
+                </div>
+
+                {/* Stat 2: On Time Tasks */}
+                <div
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px solid rgba(200, 255, 0, 0.3)',
+                    borderRadius: '8px',
+                    padding: '1.25rem',
+                  }}
+                >
+                  <div style={{ fontSize: '0.78rem', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                    Submitted On Time
+                  </div>
+                  <div style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--accent)', margin: '0.4rem 0 0.1rem 0' }}>
+                    {perfData.onTimeCount}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>
+                    {perfData.onTimeRate}% on-time completion rate
+                  </div>
+                </div>
+
+                {/* Stat 3: Delayed Tasks */}
+                <div
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px solid rgba(255, 68, 68, 0.3)',
+                    borderRadius: '8px',
+                    padding: '1.25rem',
+                  }}
+                >
+                  <div style={{ fontSize: '0.78rem', color: '#ff6b6b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                    Delayed Tasks
+                  </div>
+                  <div style={{ fontSize: '2.4rem', fontWeight: 700, color: '#ff4444', margin: '0.4rem 0 0.1rem 0' }}>
+                    {perfData.delayedCount}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#ff6b6b' }}>
+                    {perfData.delayedRate}% delay rate
+                  </div>
+                </div>
+              </div>
+
+              {/* Bar Graph Section */}
+              <div
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--line)',
+                  borderRadius: '8px',
+                  padding: '1.5rem',
+                  marginBottom: '1.5rem',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '1rem',
+                    marginBottom: '1.5rem',
+                    borderBottom: '1px solid var(--line)',
+                    paddingBottom: '1rem',
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem' }}>
+                      Performance Bar Graph &mdash; <span style={{ color: 'var(--accent)' }}>{selectedPerfUser.name}</span>
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                      {perfFromDate || perfTillDate ? (
+                        <>
+                          Date range: {perfFromDate ? `From ${perfFromDate}` : 'Beginning'} &rarr;{' '}
+                          {perfTillDate ? `Till ${perfTillDate}` : 'Present'}
+                        </>
+                      ) : (
+                        'Date range: All Time'
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Legend */}
+                  <div style={{ display: 'flex', gap: '1.25rem', fontSize: '0.85rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '3px',
+                          background: 'var(--accent)',
+                          display: 'inline-block',
+                        }}
+                      />
+                      <span>On Time ({perfData.onTimeCount})</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '3px',
+                          background: '#ff4444',
+                          display: 'inline-block',
+                        }}
+                      />
+                      <span>Delayed ({perfData.delayedCount})</span>
+                    </div>
+                  </div>
+                </div>
+
+                {perfData.totalCount === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3.5rem 1rem', color: 'var(--muted)' }}>
+                    <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text)' }}>
+                      No tasks found for {selectedPerfUser.name}
+                    </p>
+                    <p style={{ fontSize: '0.85rem' }}>
+                      No task submissions were recorded for this employee in the selected date range. Try widening the dates or selecting &quot;All Time&quot;.
+                    </p>
+                  </div>
+                ) : (
+                  (() => {
+                    const maxCount = Math.max(perfData.onTimeCount, perfData.delayedCount, 1);
+                    const chartHeight = 220; // px
+                    const onTimeHeightPx = Math.max(
+                      14,
+                      Math.round((perfData.onTimeCount / maxCount) * chartHeight)
+                    );
+                    const delayedHeightPx = Math.max(
+                      14,
+                      Math.round((perfData.delayedCount / maxCount) * chartHeight)
+                    );
+
+                    // Y-axis tick values
+                    const yTicks = [
+                      maxCount,
+                      Math.round(maxCount * 0.75),
+                      Math.round(maxCount * 0.5),
+                      Math.round(maxCount * 0.25),
+                      0,
+                    ];
+
+                    return (
+                      <div style={{ padding: '0.5rem 0' }}>
+                        {/* Visual Chart Container */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            position: 'relative',
+                            height: `${chartHeight + 40}px`,
+                            alignItems: 'flex-end',
+                            paddingLeft: '45px',
+                            paddingBottom: '25px',
+                            borderBottom: '2px solid var(--line)',
+                          }}
+                        >
+                          {/* Y-Axis labels & Grid lines */}
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              bottom: '25px',
+                              width: '35px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-end',
+                              fontSize: '0.75rem',
+                              color: 'var(--muted)',
+                              paddingRight: '6px',
+                            }}
+                          >
+                            {yTicks.map((val, idx) => (
+                              <span key={idx}>{val}</span>
+                            ))}
+                          </div>
+
+                          {/* Horizontal Grid lines */}
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: '45px',
+                              right: 0,
+                              top: 0,
+                              bottom: '25px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            {yTicks.map((_, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  borderBottom: '1px dashed rgba(255, 255, 255, 0.08)',
+                                  width: '100%',
+                                }}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Bars Container */}
+                          <div
+                            style={{
+                              position: 'relative',
+                              zIndex: 2,
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'flex-end',
+                              gap: '4rem',
+                              width: '100%',
+                              height: '100%',
+                            }}
+                          >
+                            {/* Bar 1: On Time */}
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                width: '120px',
+                              }}
+                            >
+                              {/* Value Label above bar */}
+                              <div
+                                style={{
+                                  marginBottom: '0.4rem',
+                                  textAlign: 'center',
+                                  fontSize: '0.9rem',
+                                  fontWeight: 700,
+                                  color: 'var(--accent)',
+                                }}
+                              >
+                                {perfData.onTimeCount}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--muted)', display: 'block' }}>
+                                  ({perfData.onTimeRate}%)
+                                </span>
+                              </div>
+
+                              {/* Vertical Bar */}
+                              <div
+                                style={{
+                                  width: '100%',
+                                  height: `${perfData.onTimeCount > 0 ? onTimeHeightPx : 4}px`,
+                                  background: 'linear-gradient(180deg, var(--accent) 0%, #7da600 100%)',
+                                  borderRadius: '6px 6px 0 0',
+                                  boxShadow: perfData.onTimeCount > 0 ? '0 0 16px rgba(200, 255, 0, 0.25)' : 'none',
+                                  transition: 'height 0.3s ease',
+                                }}
+                              />
+                            </div>
+
+                            {/* Bar 2: Delayed */}
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                width: '120px',
+                              }}
+                            >
+                              {/* Value Label above bar */}
+                              <div
+                                style={{
+                                  marginBottom: '0.4rem',
+                                  textAlign: 'center',
+                                  fontSize: '0.9rem',
+                                  fontWeight: 700,
+                                  color: '#ff4444',
+                                }}
+                              >
+                                {perfData.delayedCount}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--muted)', display: 'block' }}>
+                                  ({perfData.delayedRate}%)
+                                </span>
+                              </div>
+
+                              {/* Vertical Bar */}
+                              <div
+                                style={{
+                                  width: '100%',
+                                  height: `${perfData.delayedCount > 0 ? delayedHeightPx : 4}px`,
+                                  background: 'linear-gradient(180deg, #ff5555 0%, #b31414 100%)',
+                                  borderRadius: '6px 6px 0 0',
+                                  boxShadow: perfData.delayedCount > 0 ? '0 0 16px rgba(255, 68, 68, 0.25)' : 'none',
+                                  transition: 'height 0.3s ease',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* X-Axis Labels below the baseline */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            gap: '4rem',
+                            paddingLeft: '45px',
+                            marginTop: '0.75rem',
+                          }}
+                        >
+                          <div style={{ width: '120px', textAlign: 'center' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--accent)' }}>
+                              On Time
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
+                              {perfData.onTimeCount} task{perfData.onTimeCount === 1 ? '' : 's'} on schedule
+                            </div>
+                          </div>
+
+                          <div style={{ width: '120px', textAlign: 'center' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#ff6b6b' }}>
+                              Delayed
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
+                              {perfData.delayedCount} task{perfData.delayedCount === 1 ? '' : 's'} overdue
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+
+              {/* Tasks Breakdown Table */}
+              <div style={{ marginTop: '2rem' }}>
+                <h3 style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>
+                  Detailed Task Submissions ({perfData.tasks.length})
+                </h3>
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Contract No</th>
+                        <th>Part No</th>
+                        <th>Part Description</th>
+                        <th>Est. Date</th>
+                        <th>Submission Date</th>
+                        <th>Performance</th>
+                        <th>Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {perfData.tasks.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                            No task submissions recorded
+                          </td>
+                        </tr>
+                      ) : (
+                        perfData.tasks.map((t) => (
+                          <tr key={t.id}>
+                            <td>
+                              {Boolean(t.isFinal) && (
+                                <span style={{ marginRight: '0.4rem', fontSize: '1rem' }} title="Finalized Completion">
+                                  ✅
+                                </span>
+                              )}
+                              {t.contractNo}
+                            </td>
+                            <td>{t.partNo}</td>
+                            <td>{t.partDescription}</td>
+                            <td>{new Date(t.estimatedDate).toLocaleDateString()}</td>
+                            <td>{new Date(t.submissionDate).toLocaleDateString()}</td>
+                            <td>
+                              {t.isDelayed ? (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    background: 'rgba(255, 68, 68, 0.15)',
+                                    color: '#ff6b6b',
+                                    border: '1px solid rgba(255, 68, 68, 0.3)',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {t.delayText}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    background: 'rgba(200, 255, 0, 0.15)',
+                                    color: 'var(--accent)',
+                                    border: '1px solid rgba(200, 255, 0, 0.3)',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {t.delayText}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <ExpandableRemarks text={t.remarks} />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
         </section>
